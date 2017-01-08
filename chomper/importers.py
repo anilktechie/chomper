@@ -1,6 +1,8 @@
+import types
 import six
 import time
 import logging
+from copy import copy
 from chomper.exceptions import ItemNotImportable
 
 
@@ -10,8 +12,7 @@ class Importer(object):
     """
 
     name = None
-    feed = None
-    processors = None
+    pipeline = None
     close_when_idle = True
 
     def __init__(self, name=None, **kwargs):
@@ -21,11 +22,8 @@ class Importer(object):
         if not self.name:
             self.name = type(self).__name__
 
-        if self.feed is None:
-            raise ValueError('Cannot create an importer without an item feed')
-
-        if self.processors is None:
-            self.processors = []
+        if self.pipeline is None:
+            self.pipeline = []
 
         self.items_processed = 0
         self.items_dropped = 0
@@ -37,27 +35,38 @@ class Importer(object):
     def logger(self):
         return logging.getLogger(self.name)
 
-    def process_item(self, item):
-        for processor in self.processors:
-            item = processor(item)
-        return item
-
     def run(self):
-        for item in self.feed.read():
-            if item is None:
-                break
-
-            try:
-                self.process_item(item)
-            except ItemNotImportable as e:
-                self.logger.info(e.message)
-                self.items_dropped += 1
-                continue
-            else:
-                self.items_processed += 1
+        actions = copy(self.pipeline)
+        root_action = actions.pop(0)
+        result = root_action()
+        self.run_actions(result, actions)
 
         if not self.close_when_idle:
             time.sleep(1)
             self.run()
         else:
-            self.logger.info('Importer finished, %d items were imported' % self.items_processed)
+            self.logger.info('Importer finished, %d items were imported and %d were dropped' %
+                             (self.items_processed, self.items_dropped))
+
+    def run_actions(self, result, actions):
+        action = actions.pop(0)
+        is_generator = isinstance(result, types.GeneratorType)
+        is_list = isinstance(result, list) or isinstance(result, tuple)
+
+        if not is_generator and not is_list:
+            result = [result]
+
+        for item in result:
+            if item is None:
+                continue
+
+            try:
+                next_result = action(item)
+            except ItemNotImportable as e:
+                self.logger.info(e.message)
+                self.items_dropped += 1
+            else:
+                if len(actions):
+                    self.run_actions(next_result, copy(actions))
+                else:
+                    self.items_processed += 1

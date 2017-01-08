@@ -23,7 +23,7 @@ class RedisFeed(Feed):
         self.key = key
         self.redis = redis.StrictRedis(host=host, port=port, **redis_args)
 
-    def read(self):
+    def __call__(self):
         result = self.redis.blpop([self.key], self.timeout)
 
         if result is None:

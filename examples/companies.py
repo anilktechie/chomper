@@ -9,9 +9,8 @@ logging.basicConfig(level=logging.DEBUG)
 
 class AsxCompaniesImporter(Importer):
 
-    feed = HttpFeed('http://www.asx.com.au/asx/research/ASXListedCompanies.csv', read_lines=True, skip_lines=3)
-
-    processors = [
+    pipeline = [
+        HttpFeed('http://www.asx.com.au/asx/research/ASXListedCompanies.csv', read_lines=True, skip_lines=3),
         EmptyDropper(),
         CsvLoader(keys=['name', 'symbol', 'industry']),
         ValueDropper('industry', values=['Not Applic', 'Class Pend']),

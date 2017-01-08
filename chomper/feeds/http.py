@@ -17,7 +17,7 @@ class HttpFeed(Feed):
         self.skip_lines = skip_lines
         self.request_args = request_args
 
-    def read(self):
+    def __call__(self):
         response = requests.request(self.method, self.url, **self.request_args)
         if self.read_lines:
             lines = response.iter_lines()
