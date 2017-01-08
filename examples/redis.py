@@ -16,8 +16,3 @@ class SimpleRedisImporter(Importer):
         JsonLoader(),
         ItemLogger()
     ]
-
-
-if __name__ == "__main__":
-    importer = SimpleRedisImporter()
-    importer.run()

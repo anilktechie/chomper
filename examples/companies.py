@@ -22,8 +22,3 @@ class AsxCompaniesImporter(Importer):
         FieldRemover('name'),
         ItemLogger()
     ]
-
-
-if __name__ == "__main__":
-    importer = AsxCompaniesImporter()
-    importer.run()

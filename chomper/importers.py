@@ -3,7 +3,9 @@ import six
 import time
 import logging
 from copy import copy
+from chomper.utils import smart_invoke
 from chomper.exceptions import ItemNotImportable
+from chomper.pipelines import ItemMeta
 
 
 class Importer(object):
@@ -39,7 +41,9 @@ class Importer(object):
         actions = copy(self.pipeline)
         root_action = actions.pop(0)
         result = root_action()
-        self.run_actions(result, actions)
+        meta = ItemMeta()
+
+        self.run_actions(result, meta, actions)
 
         if not self.close_when_idle:
             time.sleep(1)
@@ -48,7 +52,7 @@ class Importer(object):
             self.logger.info('Importer finished, %d items were imported and %d were dropped' %
                              (self.items_processed, self.items_dropped))
 
-    def run_actions(self, result, actions):
+    def run_actions(self, result, meta, actions):
         action = actions.pop(0)
         is_generator = isinstance(result, types.GeneratorType)
         is_list = isinstance(result, list) or isinstance(result, tuple)
@@ -59,14 +63,13 @@ class Importer(object):
         for item in result:
             if item is None:
                 continue
-
             try:
-                next_result = action(item)
+                next_result = smart_invoke(action, [item, meta, self])
             except ItemNotImportable as e:
                 self.logger.info(e.message)
                 self.items_dropped += 1
             else:
                 if len(actions):
-                    self.run_actions(next_result, copy(actions))
+                    self.run_actions(next_result, ItemMeta.copy_from(meta), copy(actions))
                 else:
                     self.items_processed += 1

@@ -1,4 +1,4 @@
-import inspect
+from chomper.utils import smart_invoke
 from . import Processor
 
 
@@ -14,11 +14,10 @@ class ValueFilter(Processor):
     def __call__(self, item):
         try:
             value = item[self.key]
-            spec = inspect.getargspec(self.filter)
-            if len(spec.args) == 2:
-                item[self.key] = self.filter(value, item)
-            else:
-                item[self.key] = self.filter(value)
+            item[self.key] = smart_invoke(self.filter, [value, item])
         except KeyError:
             pass
+        except TypeError:
+            pass
+
         return item
