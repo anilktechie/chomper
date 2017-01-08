@@ -1,7 +1,7 @@
 import logging
 from chomper import Importer
 from chomper.feeds import HttpFeed
-from chomper.processors import CsvLoader, ItemLogger, EmptyDropper, ValueDropper, ValueMapper, ValueFilter
+from chomper.processors import CsvLoader, ItemLogger, EmptyDropper, ValueDropper, ValueMapper, ValueFilter, FieldRemover
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -20,6 +20,7 @@ class AsxCompaniesImporter(Importer):
             'Commercial Services & Supplies': 'Commercial & Professional Services'
         }),
         ValueFilter('symbol', lambda v: '%s.AX' % v),
+        FieldRemover('name'),
         ItemLogger()
     ]
 
