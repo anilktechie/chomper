@@ -28,6 +28,26 @@ class BasePostgresExporter(Exporter):
         self.connection_args = dict(database=database, user=user, password=password, host=host, port=port)
         self.connection = psycopg2.connect(**self.connection_args)
         self.connection.set_client_encoding('utf-8')
+        self.check_postgres_version()
+
+    def check_postgres_version(self):
+        """
+        Show a warning if we're using a version of postgres < 9.5
+        """
+        min_version = (9, 5)
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute("select current_setting('server_version')")
+            result = cursor.fetchone()
+        except DatabaseError:
+            return None
+        else:
+            version_str = result[0]
+            version = tuple([int(num) for num in version_str.split('.')])
+            if version < min_version:
+                self.logger.warn('Postgres version > 9.5 is recommended. You are currently usng v%s' % version_str)
+        finally:
+            cursor.close()
 
     def table_columns(self):
         """
