@@ -49,6 +49,8 @@ class Importer(object):
             time.sleep(1)
             self.run()
         else:
+            # TODO: stats might need to be reset (if you call run() twice on the same instance)
+            # TODO: need to handle closing pipeline actions here (eg. close database connections)
             self.logger.info('Importer finished, %d items were imported and %d were dropped' %
                              (self.items_processed, self.items_dropped))
 

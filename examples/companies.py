@@ -2,7 +2,7 @@ import logging
 from chomper import Importer
 from chomper.feeds import HttpFeed
 from chomper.processors import CsvLoader, ItemLogger, EmptyDropper, ValueDropper, ValueMapper, ValueFilter, FieldRemover
-
+from chomper.exporters import PostgresInserter, PostgresUpdater
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -19,6 +19,8 @@ class AsxCompaniesImporter(Importer):
             'Commercial Services & Supplies': 'Commercial & Professional Services'
         }),
         ValueFilter('symbol', lambda v: '%s.AX' % v),
-        FieldRemover('name'),
+        # ValueFilter('industry', lambda: None),
+        PostgresInserter(table='companies', database='test', user='postgres', password='postgres'),
+        # PostgresUpdater(identifiers='symbol', table='companies', database='test', user='postgres', password='postgres'),
         ItemLogger()
     ]

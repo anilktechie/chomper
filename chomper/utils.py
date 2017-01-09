@@ -1,4 +1,5 @@
 import inspect
+import types
 
 
 def smart_invoke(func, args):
@@ -9,7 +10,8 @@ def smart_invoke(func, args):
         args = [args]
 
     # inspect.getargspec does not support callable objects be default
-    if hasattr(func, '__call__'):
+    # Also make sure func isn't a lambda as they have a __call__ attr
+    if not isinstance(func, types.LambdaType) and hasattr(func, '__call__'):
         func = func.__call__
 
     spec = inspect.getargspec(func)
