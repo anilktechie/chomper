@@ -1,7 +1,7 @@
 import logging
 from chomper import Importer
 from chomper.feeds import HttpFeed
-from chomper.processors import CsvLoader, ItemLogger, EmptyDropper, ValueDropper, ValueMapper, ValueFilter, FieldRemover
+from chomper.processors import CsvLoader, ItemLogger, EmptyDropper, ValueDropper, ValueMapper, ValueFilter, FieldRemover, FieldSetter
 from chomper.exporters import PostgresInserter, PostgresUpdater, PostgresUpserter
 
 logging.basicConfig(level=logging.DEBUG)
@@ -19,9 +19,14 @@ class AsxCompaniesImporter(Importer):
             'Commercial Services & Supplies': 'Commercial & Professional Services'
         }),
         ValueFilter('symbol', lambda v: '%s.AX' % v),
+        FieldSetter('exchange', 'get_exchange', cache=True),
         # ValueFilter('industry', lambda: None),
         # PostgresInserter(table='companies', database='test', user='postgres', password='postgres'),
         # PostgresUpdater(identifiers='symbol', table='companies', database='test', user='postgres', password='postgres'),
         PostgresUpserter(identifiers='symbol', table='companies', database='test', user='postgres', password='postgres'),
         ItemLogger()
     ]
+
+    def get_exchange(self):
+        self.logger.info('Called "get_exchange"')
+        return 'ASX'
