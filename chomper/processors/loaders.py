@@ -8,13 +8,17 @@ except ImportError:
 
 from chomper.exceptions import ItemNotImportable
 from . import Processor
+from .droppers import EmptyDropper
 
 
 class JsonLoader(Processor):
 
+    def __init__(self):
+        self.dropper = EmptyDropper()
+
     def __call__(self, item):
         try:
-            return json.loads(item)
+            return json.loads(self.dropper(item))
         except ValueError:
             # Bad JSON string
             raise ItemNotImportable('Could not load JSON string \n%r' % pprint.pformat(item))
@@ -27,10 +31,11 @@ class CsvLoader(Processor):
 
     def __init__(self, keys=None, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL):
         self.keys = keys
+        self.dropper = EmptyDropper()
         self.reader_args = dict(delimiter=delimiter, quotechar=quotechar, quoting=quoting)
 
     def __call__(self, item):
-        item = next(csv.reader([item], **self.reader_args))
+        item = next(csv.reader([self.dropper(item)], **self.reader_args))
 
         # If keys are provided, convert the list to a dict
         if self.keys:

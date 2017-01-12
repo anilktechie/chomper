@@ -11,7 +11,7 @@ class AsxCompaniesImporter(Importer):
 
     pipeline = [
         HttpFeed('http://www.asx.com.au/asx/research/ASXListedCompanies.csv', read_lines=True, skip_lines=3),
-        EmptyDropper(),
+        # EmptyDropper(),
         CsvLoader(keys=['name', 'symbol', 'industry']),
         ValueDropper('industry', values=['Not Applic', 'Class Pend']),
         ValueMapper('industry', mapping={
