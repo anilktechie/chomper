@@ -23,10 +23,16 @@ class AsxCompaniesImporter(Importer):
         # ValueFilter('industry', lambda: None),
         # PostgresInserter(table='companies', database='test', user='postgres', password='postgres'),
         # PostgresUpdater(identifiers='symbol', table='companies', database='test', user='postgres', password='postgres'),
-        PostgresUpserter(identifiers='symbol', table='companies', database='test', user='postgres', password='postgres'),
+        PostgresUpserter(identifiers='symbol', on_insert='on_insert', on_name_change='on_name_change', table='companies', database='test', user='postgres', password='postgres'),
         ItemLogger()
     ]
 
     def get_exchange(self):
         self.logger.info('Called "get_exchange"')
         return 'ASX'
+
+    def on_insert(self):
+        self.logger.info('A new company has been added')
+
+    def on_name_change(self):
+        self.logger.info('The name of a company has changed')

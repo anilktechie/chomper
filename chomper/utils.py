@@ -1,5 +1,4 @@
 import inspect
-import types
 
 
 def smart_invoke(func, args):

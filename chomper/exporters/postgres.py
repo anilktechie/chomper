@@ -1,11 +1,13 @@
 import six
 
 from chomper.exceptions import NotConfigured, ItemNotImportable
+from chomper.utils import smart_invoke
 from . import Exporter
 
 try:
     import psycopg2
     from psycopg2 import ProgrammingError, DatabaseError, errorcodes
+    from psycopg2.extras import RealDictCursor
 except ImportError:
     raise NotConfigured('Psycopg2 library not installed')
 
@@ -253,6 +255,9 @@ class PostgresUpserter(BasePostgresExporter):
         :param args: Postgres connection args
         :param kwargs: Postgres connection kwargs
         """
+        # Find any change listeners in kwargs (Eg. on_update, on_insert, on_title_change)
+        self.listeners = {key: kwargs.pop(key) for key in kwargs.keys() if key[:3] == 'on_'}
+
         super(PostgresUpserter, self).__init__(*args, **kwargs)
 
         if isinstance(identifiers, six.string_types):
@@ -273,11 +278,14 @@ class PostgresUpserter(BasePostgresExporter):
             # By default, try to update on the item's id
             self.identifiers = ['id']
 
-    def __call__(self, item):
-        cursor = self.connection.cursor()
+    def __call__(self, item, meta, importer):
+        cursor = self.connection.cursor(cursor_factory=RealDictCursor)
 
         all_columns = self.item_columns(item, self.columns)
         update_columns = self.item_columns(item, self.columns, self.identifiers)
+
+        # Item dict that only contains the fields that can be inserted into the table
+        item_state = {key: value for key, value in six.iteritems(item) if key in all_columns}
 
         where_sql = ' AND '.join('%s = %%s' % i for i in self.identifiers)
         columns_sql = ', '.join(all_columns)
@@ -288,7 +296,7 @@ class PostgresUpserter(BasePostgresExporter):
         set_params = [item[col] for col in update_columns]
         values_params = [item[col] for col in all_columns]
 
-        select_sql = 'SELECT COUNT(*) FROM %(table)s WHERE %(where_sql)s LIMIT 1' % dict(
+        select_sql = 'SELECT * FROM %(table)s WHERE %(where_sql)s LIMIT 1' % dict(
             table=self.table,
             where_sql=where_sql
         )
@@ -310,16 +318,16 @@ class PostgresUpserter(BasePostgresExporter):
 
         try:
             cursor.execute(select_sql, select_params)
+            result = cursor.fetchone()
 
-            if cursor.fetchone()[0] > 0:
+            if result:
                 # Already in database, update row values
                 cursor.execute(update_sql, update_params)
             else:
                 # Does not exist, insert the item
                 cursor.execute(insert_sql, insert_params)
 
-            # TODO: add a property to the item meta object to indicate if the item was inserted or updated
-
+            self.notify_change_listeners(item_state, result, importer)
             self.connection.commit()
         except ProgrammingError as e:
             self.connection.rollback()
@@ -328,3 +336,55 @@ class PostgresUpserter(BasePostgresExporter):
             return item
         finally:
             cursor.close()
+
+    def notify_change_listeners(self, current, previous, importer):
+        """
+        Call any changes listeners
+
+        on_insert: A new row war created for the item
+        on_update: An existing row was updated with the new item data
+        on_{field_name}_change: A field's value was changed in the database (either inserted or updated)
+
+        :param current: The current state in the database
+        :param previous: The database state of the row before the upsert (can be None)
+        :param importer: Parent mporter object
+        """
+        triggered_listeners = []
+
+        if previous:
+            # Notify of an update
+            if 'on_update' in self.listeners:
+                triggered_listeners.append('on_update')
+        else:
+            # Notify of an insert
+            if 'on_insert' in self.listeners:
+                triggered_listeners.append('on_insert')
+
+        if not previous:
+            triggered_listeners += current.keys()
+        else:
+            for key, value in six.iteritems(current):
+                if key not in previous or value != previous[key]:
+                    triggered_listeners.append('on_%s_change' % key)
+
+        for listener_name in triggered_listeners:
+            self.invoke_change_listener(listener_name, [current, previous], importer)
+
+    def invoke_change_listener(self, listener_name, listener_args, importer):
+        """
+        Invoke the change listener
+
+        Change listeners may be a callable or a method name on the importer.
+        """
+        if listener_name not in self.listeners:
+            return
+
+        listener = self.listeners[listener_name]
+
+        if callable(listener):
+            return smart_invoke(listener, listener_args)
+        elif isinstance(listener, six.string_types) and hasattr(importer, listener):
+            return smart_invoke(getattr(importer, listener), listener_args)
+        else:
+            self.logger.warn('Change listener "%s" could not be called. Must be a callable of importer method.' %
+                             listener)
