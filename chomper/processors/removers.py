@@ -2,7 +2,7 @@ import six
 from . import Processor
 
 
-class FieldRemover(Processor):
+class KeyRemover(Processor):
 
     def __init__(self, *args):
         if len(args) > 1:

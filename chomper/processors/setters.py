@@ -24,7 +24,7 @@ class DefaultSetter(Processor):
         return item
 
 
-class FieldSetter(Processor):
+class KeySetter(Processor):
 
     def __init__(self, key, func, cache=False):
         self.key = key
@@ -35,7 +35,7 @@ class FieldSetter(Processor):
 
     def __call__(self, item, meta, importer):
         if self.key in item:
-            self.logger.debug('Field setter will override an existing field for key "%s"' % self.key)
+            self.logger.debug('Key setter will override an existing value for key "%s"' % self.key)
 
         if self.cache and self.executed:
             item[self.key] = self.result
