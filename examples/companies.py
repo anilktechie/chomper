@@ -1,7 +1,7 @@
 import logging
 from chomper import Importer
 from chomper.feeds import HttpFeed
-from chomper.processors import CsvLoader, ItemLogger, EmptyDropper, ValueDropper, ValueMapper, ValueFilter, KeyRemover, KeySetter
+from chomper.processors import CsvLoader, ItemLogger, EmptyDropper, ValueDropper, ValueMapper, ValueFilter, KeyRemover, KeySetter, KeyMapper
 from chomper.exporters import PostgresInserter, PostgresUpdater, PostgresUpserter
 
 logging.basicConfig(level=logging.DEBUG)
@@ -13,6 +13,8 @@ class AsxCompaniesImporter(Importer):
         HttpFeed('http://www.asx.com.au/asx/research/ASXListedCompanies.csv', read_lines=True, skip_lines=3),
         # EmptyDropper(),
         CsvLoader(keys=['name', 'symbol', 'industry']),
+        KeyMapper(symbol='code'),
+        KeyMapper(code='symbol'),
         ValueDropper('industry', values=['Not Applic', 'Class Pend']),
         ValueMapper('industry', mapping={
             'Pharmaceuticals & Biotechnology': 'Pharmaceuticals, Biotechnology & Life Sciences',
