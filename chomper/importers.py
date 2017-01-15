@@ -66,7 +66,7 @@ class Importer(object):
             if item is None:
                 continue
             try:
-                next_result = smart_invoke(action, [item, meta, self])
+                next_result = self.invoke_action(action, [item, meta, self])
             except ItemNotImportable as e:
                 self.logger.info(e.message)
                 self.items_dropped += 1
@@ -75,3 +75,11 @@ class Importer(object):
                     self.run_actions(next_result, ItemMeta.copy_from(meta), copy(actions))
                 else:
                     self.items_processed += 1
+
+    def invoke_action(self, action, action_args):
+        if callable(action):
+            return smart_invoke(action, action_args)
+        elif isinstance(action, six.string_types) and hasattr(self, action):
+            return smart_invoke(getattr(self, action), action_args)
+        else:
+            self.logger.warn('Action "%s" could not be called. Must be a callable or importer method.' % action)

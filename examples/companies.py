@@ -15,6 +15,7 @@ class AsxCompaniesImporter(Importer):
         CsvLoader(keys=['name', 'symbol', 'industry']),
         KeyMapper(symbol='code'),
         KeyMapper(code='symbol'),
+        'some_action',
         ValueDropper('industry', values=['Not Applic', 'Class Pend']),
         ValueMapper('industry', mapping={
             'Pharmaceuticals & Biotechnology': 'Pharmaceuticals, Biotechnology & Life Sciences',
@@ -28,6 +29,11 @@ class AsxCompaniesImporter(Importer):
         PostgresUpserter(identifiers='symbol', on_insert='on_insert', on_name_change='on_name_change', table='companies', database='test', user='postgres', password='postgres'),
         ItemLogger()
     ]
+
+    @staticmethod
+    def some_action(item):
+        # Custom action example
+        return item
 
     def get_exchange(self):
         self.logger.info('Called "get_exchange"')
