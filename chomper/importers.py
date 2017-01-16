@@ -55,6 +55,7 @@ class Importer(object):
                              (self.items_processed, self.items_dropped))
 
     def run_actions(self, result, meta, actions):
+        # TODO: Refactor all of this; way to messy
         action = actions.pop(0)
         is_generator = isinstance(result, types.GeneratorType)
         is_list = isinstance(result, list) or isinstance(result, tuple)
@@ -65,16 +66,25 @@ class Importer(object):
         for item in result:
             if item is None:
                 continue
-            try:
-                next_result = self.invoke_action(action, [item, meta, self])
-            except ItemNotImportable as e:
-                self.logger.info(e.message)
-                self.items_dropped += 1
+
+            # Execute child pipelines
+            if isinstance(action, list):
+                # Child pipelines don't return a result to the parent pipeline or
+                # manipulate the item in parent pipeline
+                next_result = copy(item)
+                self.run_actions(item, ItemMeta.copy_from(meta), copy(action))
             else:
-                if len(actions):
-                    self.run_actions(next_result, ItemMeta.copy_from(meta), copy(actions))
-                else:
-                    self.items_processed += 1
+                try:
+                    next_result = self.invoke_action(action, [item, meta, self])
+                except ItemNotImportable as e:
+                    self.logger.info(e.message)
+                    self.items_dropped += 1
+                    continue
+
+            if len(actions):
+                self.run_actions(next_result, ItemMeta.copy_from(meta), copy(actions))
+            else:
+                self.items_processed += 1
 
     def invoke_action(self, action, action_args):
         if callable(action):
