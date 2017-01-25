@@ -1,5 +1,6 @@
 import six
 
+from chomper import config
 from chomper.exceptions import NotConfigured, ItemNotImportable
 from chomper.utils import smart_invoke
 from . import Exporter
@@ -12,11 +13,11 @@ except ImportError:
     raise NotConfigured('Psycopg2 library not installed')
 
 
-class BasePostgresExporter(Exporter):
+class PostgresProcessor(Exporter):
 
-    def __init__(self, table, database, user, password, host='localhost', port=5432):
+    def __init__(self, table, database=None, user=None, password=None, host=None, port=None):
         """
-        Base class for all Postgres exporters
+        Base class for all Postgres processors
 
         :param table: Name of the database table this exporter with interact with
         :param database: Postgres database name
@@ -25,9 +26,27 @@ class BasePostgresExporter(Exporter):
         :param host: Postgres host
         :param port: Postgres post
         """
+        def _first(opts):
+            return next(iter(opt for opt in opts if opt is not None))
+
+        self.database = _first([database, config.get('postgres', 'database')])
+        self.user = _first([user, config.get('postgres', 'user')])
+        self.password = _first([password, config.get('postgres', 'password')])
+        self.host = _first([host, config.get('postgres', 'host'), 'localhost'])
+        self.port = _first([port, config.get('postgres', 'port'), '5432'])
         self.table = table
-        self.database = database
-        self.connection_args = dict(database=database, user=user, password=password, host=host, port=port)
+
+        if not self.database or not self.user:
+            raise ValueError('Missing Postgres database credentials')
+
+        self.connection_args = dict(
+            database=self.database,
+            user=self.user,
+            password=self.password,
+            host=self.host,
+            port=self.port
+        )
+
         self.connection = psycopg2.connect(**self.connection_args)
         self.connection.set_client_encoding('utf-8')
         self.check_postgres_version()
@@ -105,7 +124,7 @@ class BasePostgresExporter(Exporter):
         self.connection.close()
 
 
-class PostgresInserter(BasePostgresExporter):
+class PostgresInserter(PostgresProcessor):
 
     def __init__(self, columns=None, *args, **kwargs):
         """
@@ -160,7 +179,7 @@ class PostgresInserter(BasePostgresExporter):
         return [item[column] for column in columns]
 
 
-class PostgresUpdater(BasePostgresExporter):
+class PostgresUpdater(PostgresProcessor):
 
     def __init__(self, identifiers=None, columns=None, *args, **kwargs):
         """
@@ -238,7 +257,7 @@ class PostgresUpdater(BasePostgresExporter):
             return params
 
 
-class PostgresUpserter(BasePostgresExporter):
+class PostgresUpserter(PostgresProcessor):
 
     def __init__(self, identifiers=None, columns=None, *args, **kwargs):
         """

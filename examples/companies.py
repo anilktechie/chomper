@@ -1,10 +1,12 @@
 import logging
-from chomper import Importer
+from chomper import Importer, set_config
 from chomper.feeds import HttpFeed
 from chomper.processors import CsvLoader, ItemLogger, EmptyDropper, ValueDropper, ValueMapper, ValueFilter, KeyRemover, KeySetter, KeyMapper
 from chomper.exporters import PostgresInserter, PostgresUpdater, PostgresUpserter
 
 logging.basicConfig(level=logging.DEBUG)
+
+set_config('postgres', dict(database='test', user='postgres', password='postgres'))
 
 
 class AsxCompaniesImporter(Importer):
@@ -24,9 +26,10 @@ class AsxCompaniesImporter(Importer):
         ValueFilter('symbol', lambda v: '%s.AX' % v),
         KeySetter('exchange', 'get_exchange', cache=True),
         # ValueFilter('industry', lambda: None),
-        # PostgresInserter(table='companies', database='test', user='postgres', password='postgres'),
-        # PostgresUpdater(identifiers='symbol', table='companies', database='test', user='postgres', password='postgres'),
-        PostgresUpserter(identifiers='symbol', on_insert='on_insert', on_name_change='on_name_change', table='companies', database='test', user='postgres', password='postgres'),
+        # PostgresInserter(table='companies'),
+        # PostgresUpdater(identifiers='symbol'),
+        PostgresUpserter(identifiers='symbol', on_insert='on_insert', on_name_change='on_name_change',
+                         table='companies'),
         ItemLogger()
     ]
 
