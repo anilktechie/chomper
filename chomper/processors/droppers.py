@@ -3,6 +3,17 @@ from chomper.exceptions import ItemNotImportable
 from . import Processor
 
 
+class ItemDropper(Processor):
+
+    def __init__(self, expression):
+        self.expression = expression
+
+    def __call__(self, item):
+        if item.eval(self.expression):
+            raise ItemNotImportable('Item dropped as the provided expression "%s" evaluated to true.' % self.expression)
+        return item
+
+
 class EmptyDropper(Processor):
 
     def __call__(self, item):

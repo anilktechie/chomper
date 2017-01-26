@@ -5,7 +5,7 @@ import logging
 from copy import copy
 from chomper.utils import smart_invoke
 from chomper.exceptions import ItemNotImportable
-from chomper.pipelines import ItemMeta
+from chomper.items import Meta
 
 
 class Importer(object):
@@ -41,7 +41,7 @@ class Importer(object):
         actions = copy(self.pipeline)
         root_action = actions.pop(0)
         result = root_action()
-        meta = ItemMeta()
+        meta = Meta()
 
         self.run_actions(result, meta, actions)
 
@@ -72,7 +72,7 @@ class Importer(object):
                 # Child pipelines don't return a result to the parent pipeline or
                 # manipulate the item in parent pipeline
                 next_result = copy(item)
-                self.run_actions(item, ItemMeta.copy_from(meta), copy(action))
+                self.run_actions(item, Meta.copy_from(meta), copy(action))
             else:
                 try:
                     next_result = self.invoke_action(action, [item, meta, self])
@@ -82,7 +82,7 @@ class Importer(object):
                     continue
 
             if len(actions):
-                self.run_actions(next_result, ItemMeta.copy_from(meta), copy(actions))
+                self.run_actions(next_result, Meta.copy_from(meta), copy(actions))
             else:
                 self.items_processed += 1
 
