@@ -1,5 +1,7 @@
+from __future__ import absolute_import
+
 from chomper.exceptions import NotConfigured
-from . import Feed
+from chomper.feeds import Feed
 
 try:
     import redis

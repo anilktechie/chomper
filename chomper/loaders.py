@@ -1,24 +1,44 @@
+import logging
 import pprint
 import csv
+import six
 
 try:
     import simplejson as json
 except ImportError:
     import json
 
-from chomper.exceptions import ItemNotImportable
-from . import Processor
-from .droppers import EmptyDropper
+from .exceptions import ItemNotImportable
+from .items import Item
+
+class Loader(object):
+    """
+    Base class for all loaders
+    """
+
+    @property
+    def logger(self):
+        return logging.getLogger(type(self).__name__)
+
+    @staticmethod
+    def drop_empty(item):
+        # This covers None and empty strings
+        if not item:
+            raise ItemNotImportable('Item dropped as it was empty')
+
+        # Check if it's just a string of whitespace
+        if isinstance(item, six.string_types):
+            if item.strip() == '':
+                raise ItemNotImportable('Item dropped as it was empty (only contained whitespace)')
+
+        return item
 
 
-class JsonLoader(Processor):
-
-    def __init__(self):
-        self.dropper = EmptyDropper()
+class JsonLoader(Loader):
 
     def __call__(self, item):
         try:
-            return json.loads(self.dropper(item))
+            return Item(json.loads(self.drop_empty(item)))
         except ValueError:
             # Bad JSON string
             raise ItemNotImportable('Could not load JSON string \n%r' % pprint.pformat(item))
@@ -27,15 +47,14 @@ class JsonLoader(Processor):
             raise ItemNotImportable('Could not load JSON as input was not a string')
 
 
-class CsvLoader(Processor):
+class CsvLoader(Loader):
 
     def __init__(self, keys=None, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL):
         self.keys = keys
-        self.dropper = EmptyDropper()
         self.reader_args = dict(delimiter=delimiter, quotechar=quotechar, quoting=quoting)
 
     def __call__(self, item):
-        item = next(csv.reader([self.dropper(item)], **self.reader_args))
+        item = next(csv.reader([self.drop_empty(item)], **self.reader_args))
 
         # If keys are provided, convert the list to a dict
         if self.keys:
@@ -44,4 +63,4 @@ class CsvLoader(Processor):
                 raise ItemNotImportable()
             item = dict(zip(self.keys, item))
 
-        return item
+        return Item(item)

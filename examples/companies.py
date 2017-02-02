@@ -1,10 +1,7 @@
-import logging
 from chomper import Importer, set_config
 from chomper.feeds import HttpFeed
-from chomper.processors import CsvLoader, ItemLogger, EmptyDropper, ValueDropper, ValueMapper, ValueFilter, KeyRemover, KeySetter, KeyMapper
-from chomper.exporters import PostgresInserter, PostgresUpdater, PostgresUpserter
-
-logging.basicConfig(level=logging.DEBUG)
+from chomper.loaders import *
+from chomper.contrib.postgres import *
 
 set_config('postgres', dict(database='test', user='postgres', password='postgres'))
 
@@ -13,37 +10,13 @@ class AsxCompaniesImporter(Importer):
 
     pipeline = [
         HttpFeed('http://www.asx.com.au/asx/research/ASXListedCompanies.csv', read_lines=True, skip_lines=3),
-        # EmptyDropper(),
         CsvLoader(keys=['name', 'symbol', 'industry']),
-        KeyMapper(symbol='code'),
-        KeyMapper(code='symbol'),
-        'some_action',
-        ValueDropper('industry', values=['Not Applic', 'Class Pend']),
-        ValueMapper('industry', mapping={
+        Item.drop(Item.industry.is_in(['Not Applic', 'Class Pend'])),
+        Item.industry.map({
             'Pharmaceuticals & Biotechnology': 'Pharmaceuticals, Biotechnology & Life Sciences',
             'Commercial Services & Supplies': 'Commercial & Professional Services'
         }),
-        ValueFilter('symbol', lambda v: '%s.AX' % v),
-        KeySetter('exchange', 'get_exchange', cache=True),
-        # ValueFilter('industry', lambda: None),
-        # PostgresInserter(table='companies'),
-        # PostgresUpdater(identifiers='symbol'),
-        PostgresUpserter(identifiers='symbol', on_insert='on_insert', on_name_change='on_name_change',
-                         table='companies'),
-        ItemLogger()
+        Item.symbol.filter(lambda v: '%s.AX' % v),
+        Item.exchange.set('ASX'),
+        PostgresUpserter(identifiers=['symbol'], table='companies')
     ]
-
-    @staticmethod
-    def some_action(item):
-        # Custom action example
-        return item
-
-    def get_exchange(self):
-        self.logger.info('Called "get_exchange"')
-        return 'ASX'
-
-    def on_insert(self):
-        self.logger.info('A new company has been added')
-
-    def on_name_change(self):
-        self.logger.info('The name of a company has changed')

@@ -1,9 +1,11 @@
+from __future__ import absolute_import
+
 import six
 
 from chomper import config
 from chomper.exceptions import NotConfigured, ItemNotImportable
 from chomper.utils import smart_invoke
-from . import Exporter
+from chomper.exporters import Exporter
 
 try:
     import psycopg2
@@ -302,18 +304,19 @@ class PostgresUpserter(PostgresProcessor):
 
         all_columns = self.item_columns(item, self.columns)
         update_columns = self.item_columns(item, self.columns, self.identifiers)
+        insert_columns = [col for col in all_columns if col in item]
 
         # Item dict that only contains the fields that can be inserted into the table
         item_state = {key: value for key, value in six.iteritems(item) if key in all_columns}
 
-        where_sql = ' AND '.join('%s = %%s' % i for i in self.identifiers)
-        columns_sql = ', '.join(all_columns)
-        values_sql = ', '.join(['%s'] * len(all_columns))
-        set_sql = ', '.join('%s = %%s' % col for col in update_columns)
-
         where_params = [item[i] for i in self.identifiers]
-        set_params = [item[col] for col in update_columns]
-        values_params = [item[col] for col in all_columns]
+        set_params = [item[col] for col in update_columns if col in item]
+        values_params = [item[col] for col in all_columns if col in item]
+
+        where_sql = ' AND '.join('%s = %%s' % i for i in self.identifiers)
+        columns_sql = ', '.join(insert_columns)
+        values_sql = ', '.join(['%s'] * len(insert_columns))
+        set_sql = ', '.join('%s = %%s' % col for col in update_columns if col in item)
 
         select_sql = 'SELECT * FROM %(table)s WHERE %(where_sql)s LIMIT 1' % dict(
             table=self.table,

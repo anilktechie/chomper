@@ -1,16 +1,44 @@
-from chomper.exceptions import NotConfigured
+import logging
 
 try:
     import requests
 except ImportError:
-    raise NotConfigured('Requests library not installed')
+    requests = None
 
-from . import Feed
+from chomper.exceptions import NotConfigured
+
+
+class Feed(object):
+    """
+    Base class for all feeds
+    """
+
+    @property
+    def logger(self):
+        return logging.getLogger(type(self).__name__)
+
+
+class ListFeed(Feed):
+    """
+    Create items from a list of dicts
+    """
+
+    def __init__(self, items):
+        self.items = items
+
+    def __call__(self):
+        for item in self.items:
+            yield item
 
 
 class HttpFeed(Feed):
+    """
+    Create items from the result of an http request
+    """
 
     def __init__(self, url, method='get', read_lines=False, skip_lines=0, **request_args):
+        if requests is None:
+            raise NotConfigured('HttpFeed requires the "requests" library to be installed')
         self.url = url
         self.method = method.lower()
         self.read_lines = read_lines
