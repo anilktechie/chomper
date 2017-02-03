@@ -11,6 +11,7 @@ except ImportError:
 from .exceptions import ItemNotImportable
 from .items import Item
 
+
 class Loader(object):
     """
     Base class for all loaders
@@ -32,6 +33,12 @@ class Loader(object):
                 raise ItemNotImportable('Item dropped as it was empty (only contained whitespace)')
 
         return item
+
+
+class DictLoader(Loader):
+
+    def __call__(self, item):
+        return Item(self.drop_empty(item))
 
 
 class JsonLoader(Loader):

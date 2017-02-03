@@ -1,17 +1,18 @@
 from chomper import Importer, set_config
-from chomper.feeds import HttpFeed
+from chomper.feeds import CsvHttpFeed
 from chomper.loaders import *
 from chomper.contrib.postgres import *
 
 set_config('postgres', dict(database='test', user='postgres', password='postgres'))
+
+data_url = 'http://www.asx.com.au/asx/research/ASXListedCompanies.csv'
 
 
 class AsxCompaniesImporter(Importer):
 
     pipeline = [
         PostgresTruncator('companies'),
-        HttpFeed('http://www.asx.com.au/asx/research/ASXListedCompanies.csv', read_lines=True, skip_lines=3),
-        CsvLoader(keys=['name', 'symbol', 'industry']),
+        CsvHttpFeed(data_url, ['name', 'symbol', 'industry'], skip_lines=3),
         Item.drop(Item.industry.is_in(['Not Applic', 'Class Pend'])),
         Item.industry.map({
             'Pharmaceuticals & Biotechnology': 'Pharmaceuticals, Biotechnology & Life Sciences',
