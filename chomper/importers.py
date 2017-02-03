@@ -5,7 +5,7 @@ import logging
 from copy import copy
 from chomper.utils import smart_invoke
 from chomper.exceptions import ItemNotImportable
-from chomper.items import Meta
+from chomper.items import Meta, Item
 
 
 class Importer(object):
@@ -40,7 +40,7 @@ class Importer(object):
     def run(self):
         actions = copy(self.pipeline)
         root_action = actions.pop(0)
-        result = root_action()
+        result = self.invoke_action(root_action, [Item(), None, self])
         meta = Meta()
 
         self.run_actions(result, meta, actions)

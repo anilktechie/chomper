@@ -128,7 +128,7 @@ class PostgresProcessor(Exporter):
 
 class PostgresInserter(PostgresProcessor):
 
-    def __init__(self, columns=None, *args, **kwargs):
+    def __init__(self, table, columns=None, *args, **kwargs):
         """
         Postgres row inserter
 
@@ -136,7 +136,7 @@ class PostgresInserter(PostgresProcessor):
         :param args: Postgres connection args
         :param kwargs: Postgres connection kwargs
         """
-        super(PostgresInserter, self).__init__(*args, **kwargs)
+        super(PostgresInserter, self).__init__(table, *args, **kwargs)
 
         if isinstance(columns, six.string_types):
             columns = [columns]
@@ -183,7 +183,7 @@ class PostgresInserter(PostgresProcessor):
 
 class PostgresUpdater(PostgresProcessor):
 
-    def __init__(self, identifiers=None, columns=None, *args, **kwargs):
+    def __init__(self, table, identifiers=None, columns=None, *args, **kwargs):
         """
         Postgres row updater (does not insert if the row does not exist)
 
@@ -192,7 +192,7 @@ class PostgresUpdater(PostgresProcessor):
         :param args: Postgres connection args
         :param kwargs: Postgres connection kwargs
         """
-        super(PostgresUpdater, self).__init__(*args, **kwargs)
+        super(PostgresUpdater, self).__init__(table, *args, **kwargs)
 
         if isinstance(identifiers, six.string_types):
             identifiers = [identifiers]
@@ -259,9 +259,42 @@ class PostgresUpdater(PostgresProcessor):
             return params
 
 
+class PostgresTruncator(PostgresProcessor):
+    """
+    Truncate a Postgres table
+
+    :param table: Database table to be truncated
+    :param cascade: Cascade truncate
+    :param kwargs: Postgres connection kwargs
+    """
+
+    def __init__(self, table, cascade=False, *args, **kwargs):
+        super(PostgresTruncator, self).__init__(table, *args, **kwargs)
+        self.cascade = cascade
+
+    def __call__(self, item):
+        cursor = self.connection.cursor()
+
+        sql = 'TRUNCATE %s' % self.table
+
+        if self.cascade:
+            sql += ' CASCADE'
+
+        try:
+            cursor.execute(sql)
+            self.connection.commit()
+        except ProgrammingError as e:
+            self.connection.rollback()
+            self.handle_error(e)
+        else:
+            return item
+        finally:
+            cursor.close()
+
+
 class PostgresUpserter(PostgresProcessor):
 
-    def __init__(self, identifiers=None, columns=None, *args, **kwargs):
+    def __init__(self, table, identifiers=None, columns=None, *args, **kwargs):
         """
         Upsert rows in a Postgres database
 
@@ -279,7 +312,7 @@ class PostgresUpserter(PostgresProcessor):
         # Find any change listeners in kwargs (Eg. on_update, on_insert, on_title_change)
         self.listeners = {key: kwargs.pop(key) for key in kwargs.keys() if key[:3] == 'on_'}
 
-        super(PostgresUpserter, self).__init__(*args, **kwargs)
+        super(PostgresUpserter, self).__init__(table, *args, **kwargs)
 
         if isinstance(identifiers, six.string_types):
             identifiers = [identifiers]
