@@ -156,16 +156,3 @@ class Item(AttrDict):
             raise ValueError('Invalid expression operator "%s"' % expression.op)
 
         return fn(_val(expression.left), _val(expression.right))
-
-
-class Meta(AttrDict):
-    """
-    Item meta objects are used to allow the sharing data between pipeline actions.
-    """
-
-    @classmethod
-    def copy_from(cls, source):
-        return cls(**source)
-
-    def __repr__(self):
-        return '%s, Meta(%s)' % (super(Meta, self).__repr__(), self.__dict__)

@@ -34,10 +34,10 @@ class Defaults(Action):
         else:
             raise ValueError('Default values were not provided.')
 
-    def __call__(self, item, meta, importer):
+    def __call__(self, item, importer):
         for source in self.sources:
             if callable(source):
-                defaults = smart_invoke(source, [item, meta, importer])
+                defaults = smart_invoke(source, [item, importer])
             else:
                 defaults = source
 
@@ -69,7 +69,7 @@ class Assign(Action):
         self.result = None
         self.executed = False
 
-    def __call__(self, item, meta, importer):
+    def __call__(self, item, importer):
         if self.field in item:
             self.logger.debug('Assign action will override an existing value for key "%s"' % self.field)
 
@@ -78,12 +78,12 @@ class Assign(Action):
             return item
         else:
             self.executed = True
-            self.result = self.invoke_func(item, meta, importer)
+            self.result = self.invoke_func(item, importer)
             item[self.field] = self.result
             return item
 
-    def invoke_func(self, item, meta, importer):
-        args = [item, meta, importer]
+    def invoke_func(self, item, importer):
+        args = [item, importer]
         if callable(self.func):
             return smart_invoke(self.func, args)
         elif isinstance(self.func, six.string_types) and hasattr(importer, self.func):
@@ -232,7 +232,7 @@ class LogItem(Action):
     def __init__(self, level=logging.DEBUG):
         self.level = level
 
-    def __call__(self, item, meta):
+    def __call__(self, item):
         if isinstance(item, dict):
             self.logger.log(self.level, json.dumps(item, indent=4, sort_keys=True))
         else:

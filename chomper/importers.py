@@ -5,7 +5,7 @@ import logging
 from copy import copy
 from chomper.utils import smart_invoke
 from chomper.exceptions import ItemNotImportable
-from chomper.items import Meta, Item
+from chomper.items import Item
 
 
 class Importer(object):
@@ -41,9 +41,8 @@ class Importer(object):
         actions = copy(self.pipeline)
         root_action = actions.pop(0)
         result = self.invoke_action(root_action, [Item(), None, self])
-        meta = Meta()
 
-        self.run_actions(result, meta, actions)
+        self.run_actions(result, actions)
 
         if not self.close_when_idle:
             time.sleep(1)
@@ -54,7 +53,7 @@ class Importer(object):
             self.logger.info('Importer finished, %d items were imported and %d were dropped' %
                              (self.items_processed, self.items_dropped))
 
-    def run_actions(self, result, meta, actions):
+    def run_actions(self, result, actions):
         # TODO: Refactor all of this; way to messy
         action = actions.pop(0)
         is_generator = isinstance(result, types.GeneratorType)
@@ -72,17 +71,17 @@ class Importer(object):
                 # Child pipelines don't return a result to the parent pipeline or
                 # manipulate the item in parent pipeline
                 next_result = copy(item)
-                self.run_actions(item, Meta.copy_from(meta), copy(action))
+                self.run_actions(item, copy(action))
             else:
                 try:
-                    next_result = self.invoke_action(action, [item, meta, self])
+                    next_result = self.invoke_action(action, [item, self])
                 except ItemNotImportable as e:
                     self.logger.info(e.message)
                     self.items_dropped += 1
                     continue
 
             if len(actions):
-                self.run_actions(next_result, Meta.copy_from(meta), copy(actions))
+                self.run_actions(next_result, copy(actions))
             else:
                 self.items_processed += 1
 
