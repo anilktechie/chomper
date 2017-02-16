@@ -1,6 +1,6 @@
 from six import add_metaclass
 
-from .actions import *
+from .processors import *
 from .utils import AttrDict
 
 
@@ -59,6 +59,9 @@ class Field(object):
     def __repr__(self):
         return 'Field(%s)' % self.name
 
+    def get_name(self):
+        return self.name
+
     def __eq__(self, right):
         return Expression(self, OP.EQ, right)
 
@@ -87,19 +90,19 @@ class Field(object):
         return self.not_in(right)
 
     def map(self, mapping):
-        return MapValues(self, mapping)
+        return ValueMapper(self, mapping)
 
     def filter(self, func):
-        return FilterValue(self, func)
+        return ValueFilter(self, func)
 
     def assign(self, value, **kwargs):
-        return Assign(self, value, **kwargs)
+        return Assigner(self, value, **kwargs)
 
     def set(self, *args, **kwargs):
         return self.assign(*args, **kwargs)
 
     def drop(self, expression):
-        return DropField(self, expression)
+        return FieldDropper(self, expression)
 
 
 class ItemMetaclass(type):
@@ -111,27 +114,27 @@ class ItemMetaclass(type):
         return Field(key)
 
     def __setattr__(self, key, value):
-        return Assign(getattr(self, key), value)
+        return Assigner(getattr(self, key), value)
 
     @staticmethod
     def defaults(*args, **kwargs):
-        return Defaults(*args, **kwargs)
+        return Defaulter(*args, **kwargs)
 
     @staticmethod
     def drop(expression):
-        return DropItem(expression)
+        return ItemDropper(expression)
 
     @staticmethod
     def map(*args, **kwargs):
-        return MapKeys(*args, **kwargs)
+        return KeyMapper(*args, **kwargs)
 
     @staticmethod
     def pick(**fields):
-        return PickFields(fields)
+        return FieldPicker(fields)
 
     @staticmethod
     def omit(**fields):
-        return OmitFields(fields)
+        return FieldOmitter(fields)
 
 
 @add_metaclass(ItemMetaclass)
@@ -139,6 +142,36 @@ class Item(AttrDict):
 
     def __repr__(self):
         return 'Item(%s)' % dict(self)
+
+    def __getitem__(self, key):
+        if isinstance(key, Field):
+            key = key.name
+        return super(Item, self).__getitem__(key)
+
+    def __getattribute__(self, key):
+        if isinstance(key, Field):
+            key = key.name
+        return super(Item, self).__getattribute__(key)
+
+    def __setitem__(self, key, value):
+        if isinstance(key, Field):
+            key = key.name
+        return super(Item, self).__setitem__(key, value)
+
+    def __setattr__(self, key, value):
+        if isinstance(key, Field):
+            key = key.name
+        return super(Item, self).__setattr__(key, value)
+
+    def __delitem__(self, key):
+        if isinstance(key, Field):
+            key = key.name
+        return super(Item, self).__delitem__(key)
+
+    def __delattr__(self, key):
+        if isinstance(key, Field):
+            key = key.name
+        return super(Item, self).__delattr__(key)
 
     def eval(self, expression):
         def _val(value):

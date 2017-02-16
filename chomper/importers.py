@@ -4,10 +4,23 @@ import time
 import logging
 from copy import copy
 from chomper.utils import smart_invoke
-from chomper.exceptions import ItemNotImportable
+from chomper.exceptions import ItemNotImportable, ImporterMethodNotFound
 from chomper.items import Item
 
 
+class ImporterMethod(object):
+
+    def __init__(self, name):
+        self.name = name
+
+
+class ImporterMetaclass(type):
+
+    def __getattr__(self, name):
+        return ImporterMethod(name)
+
+
+@six.add_metaclass(ImporterMetaclass)
 class Importer(object):
     """
     Base class for all importers
@@ -37,10 +50,19 @@ class Importer(object):
     def logger(self):
         return logging.getLogger(self.name)
 
+    def setup(self):
+        def _setup(actions):
+            for action in actions:
+                if isinstance(action, list):
+                    _setup(action)
+                else:
+                    action.set_importer(self)
+        _setup(self.pipeline)
+
     def run(self):
         actions = copy(self.pipeline)
         root_action = actions.pop(0)
-        result = self.invoke_action(root_action, [Item(), None, self])
+        result = self.invoke_action(root_action, [Item()])
 
         self.run_actions(result, actions)
 
@@ -74,7 +96,7 @@ class Importer(object):
                 self.run_actions(item, copy(action))
             else:
                 try:
-                    next_result = self.invoke_action(action, [item, self])
+                    next_result = self.invoke_action(action, [item])
                 except ItemNotImportable as e:
                     self.logger.info(e.message)
                     self.items_dropped += 1
@@ -92,3 +114,12 @@ class Importer(object):
             return smart_invoke(getattr(self, action), action_args)
         else:
             self.logger.warn('Action "%s" could not be called. Must be a callable or importer method.' % action)
+
+    def get_method(self, method):
+        if hasattr(self, method.name):
+            return getattr(self, method.name)
+        elif hasattr(self.__class__, method.name):
+            return getattr(self.__class__, method.name)
+        else:
+            raise ImporterMethodNotFound('Importer "%s" has no method named "%s".' %
+                                         (self.__class__.__name__, method.name))

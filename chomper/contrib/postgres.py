@@ -332,7 +332,7 @@ class PostgresUpserter(PostgresProcessor):
             # By default, try to update on the item's id
             self.identifiers = ['id']
 
-    def __call__(self, item, meta, importer):
+    def __call__(self, item):
         cursor = self.connection.cursor(cursor_factory=RealDictCursor)
 
         all_columns = self.item_columns(item, self.columns)
@@ -382,7 +382,7 @@ class PostgresUpserter(PostgresProcessor):
                 # Does not exist, insert the item
                 cursor.execute(insert_sql, insert_params)
 
-            self.notify_change_listeners(item_state, result, importer)
+            self.notify_change_listeners(item_state, result)
             self.connection.commit()
         except ProgrammingError as e:
             self.connection.rollback()
@@ -392,7 +392,7 @@ class PostgresUpserter(PostgresProcessor):
         finally:
             cursor.close()
 
-    def notify_change_listeners(self, current, previous, importer):
+    def notify_change_listeners(self, current, previous):
         """
         Call any changes listeners
 
@@ -423,9 +423,9 @@ class PostgresUpserter(PostgresProcessor):
                     triggered_listeners.append('on_%s_change' % key)
 
         for listener_name in triggered_listeners:
-            self.invoke_change_listener(listener_name, [current, previous], importer)
+            self.invoke_change_listener(listener_name, [current, previous])
 
-    def invoke_change_listener(self, listener_name, listener_args, importer):
+    def invoke_change_listener(self, listener_name, listener_args):
         """
         Invoke the change listener
 
@@ -436,10 +436,9 @@ class PostgresUpserter(PostgresProcessor):
 
         listener = self.listeners[listener_name]
 
+        # TODO: Add support for importer methods
         if callable(listener):
             return smart_invoke(listener, listener_args)
-        elif isinstance(listener, six.string_types) and hasattr(importer, listener):
-            return smart_invoke(getattr(importer, listener), listener_args)
         else:
             self.logger.warn('Change listener "%s" could not be called. Must be a callable of importer method.' %
                              listener)
