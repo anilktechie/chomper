@@ -20,9 +20,12 @@ class ReadersTest(unittest.TestCase):
 
         feeder = ListFeeder(data)
         items = feeder()
-
-        self.assertDictEqual(next(items), data[0])
-        self.assertDictEqual(next(items), data[1])
+        item1 = next(items)
+        item2 = next(items)
+        self.assertEqual(item1.name, data[0]['name'])
+        self.assertEqual(item1.age, data[0]['age'])
+        self.assertEqual(item2.name, data[1]['name'])
+        self.assertEqual(item2.age, data[1]['age'])
         self.assertRaises(StopIteration, next, items)
 
     def test_csv_feeder(self):
