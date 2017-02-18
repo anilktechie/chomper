@@ -255,7 +255,7 @@ class FieldPicker(Processor):
             elif isinstance(field, six.string_types):
                 field_keys.append(field)
 
-        for key in item.keys():
+        for key in list(item.keys()):
             if key not in field_keys:
                 del item[key]
 
@@ -281,7 +281,7 @@ class FieldOmitter(Processor):
             elif isinstance(field, six.string_types):
                 field_keys.append(field)
 
-        for key in item.keys():
+        for key in list(item.keys()):
             if key in field_keys:
                 del item[key]
 

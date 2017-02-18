@@ -173,6 +173,11 @@ class Item(AttrDict):
             key = key.name
         return super(Item, self).__delattr__(key)
 
+    def __contains__(self, key):
+        if isinstance(key, Field):
+            key = key.name
+        return super(Item, self).__contains__(key)
+
     def eval(self, expression):
         def _val(value):
             if isinstance(value, Field):

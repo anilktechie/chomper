@@ -73,7 +73,7 @@ class ReadersTest(unittest.TestCase):
         self.assertRaises(StopIteration, next, reader_data)
 
         reader_lines_data = reader_lines.read()
-        self.assertEqual(next(reader_lines_data), '{ "name": "Jeff Winger", "age": 32 }')
-        self.assertEqual(next(reader_lines_data), '{ "name": "Annie Edison", "age": 24 }')
-        self.assertEqual(next(reader_lines_data), '{ "name": "Britta Perry", "age": 27 }')
+        self.assertEqual(next(reader_lines_data), b'{ "name": "Jeff Winger", "age": 32 }')
+        self.assertEqual(next(reader_lines_data), b'{ "name": "Annie Edison", "age": 24 }')
+        self.assertEqual(next(reader_lines_data), b'{ "name": "Britta Perry", "age": 27 }')
         self.assertRaises(StopIteration, next, reader_lines_data)
