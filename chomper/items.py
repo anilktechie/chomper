@@ -6,7 +6,7 @@ from .utils import AttrDict
 
 OPS = ['EQ', 'NE', 'LT', 'LTE', 'GT', 'GTE', 'IN', 'NOT_IN']
 
-OP = AttrDict({op: op for op in OPS})
+OP = AttrDict(dict((op, op) for op in OPS))
 
 OP_FN = AttrDict(
     EQ=lambda l, r: l == r,
