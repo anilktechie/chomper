@@ -1,6 +1,6 @@
 import logging
 from chomper import Importer
-from chomper.feeds import ListFeed
+from chomper.feeders import ListFeeder
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -21,7 +21,7 @@ def log(message):
 class PipelinesImporter(Importer):
 
     pipeline = [
-        ListFeed([dict(title='Item 1'), dict(title='Item 2'), dict(title='Item 3')]),
+        ListFeeder([dict(title='Item 1'), dict(title='Item 2'), dict(title='Item 3')]),
         log_item,
         log(' |--> Pipeline 1.1'),
         [

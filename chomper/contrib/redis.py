@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from chomper.exceptions import NotConfigured
-from chomper.feeds import Feed
+from chomper.feeders import Feeder
 
 try:
     import redis
@@ -9,7 +9,7 @@ except ImportError:
     raise NotConfigured('Redis library not installed')
 
 
-class RedisFeed(Feed):
+class RedisFeed(Feeder):
     """
     Redis item feed
 
@@ -25,7 +25,7 @@ class RedisFeed(Feed):
         self.key = key
         self.redis = redis.StrictRedis(host=host, port=port, **redis_args)
 
-    def __call__(self):
+    def feed(self, item):
         result = self.redis.blpop([self.key], self.timeout)
 
         if result is None:
