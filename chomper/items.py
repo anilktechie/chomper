@@ -1,7 +1,7 @@
 from six import add_metaclass
 
 from .processors import *
-from .utils import AttrDict
+from .utils import AttrDict, path_get, path_set, path_del, path_exists
 
 
 OPS = ['EQ', 'NE', 'LT', 'LTE', 'GT', 'GTE', 'IN', 'NOT_IN']
@@ -54,13 +54,29 @@ class Field(object):
     """
 
     def __init__(self, name):
-        self.name = name
+        self._path = name
 
     def __repr__(self):
-        return 'Field(%s)' % self.name
+        return 'Field(%s)' % self._path
 
-    def get_name(self):
-        return self.name
+    def get_path(self):
+        return self._path
+
+    def __getattr__(self, key):
+        if key.startswith('__') and key.endswith('__'):
+            return super(Field, self).__getattr__(key)
+        else:
+            self._path = '%s.%s' % (self._path, key)
+            return self
+
+    def __getitem__(self, key):
+        if isinstance(key, six.string_types):
+            self._path = '%s.%s' % (self._path, key)
+        elif isinstance(key, int):
+            self._path = '%s.[%d]' % (self._path, key)
+        elif isinstance(key, slice):
+            raise ValueError('Field slices are not supported.')
+        return self
 
     def __eq__(self, right):
         return Expression(self, OP.EQ, right)
@@ -136,6 +152,10 @@ class ItemMetaclass(type):
     def omit(**fields):
         return FieldOmitter(fields)
 
+    @staticmethod
+    def log():
+        return Logger()
+
 
 @add_metaclass(ItemMetaclass)
 class Item(AttrDict):
@@ -145,46 +165,50 @@ class Item(AttrDict):
 
     def __getitem__(self, key):
         if isinstance(key, Field):
-            key = key.name
-        return super(Item, self).__getitem__(key)
+            return path_get(key.get_path(), self)
+        else:
+            return super(Item, self).__getitem__(key)
 
     def __getattribute__(self, key):
         if isinstance(key, Field):
-            key = key.name
-        return super(Item, self).__getattribute__(key)
+            return path_get(key.get_path(), self)
+        else:
+            return super(Item, self).__getattribute__(key)
 
     def __setitem__(self, key, value):
         if isinstance(key, Field):
-            key = key.name
-        return super(Item, self).__setitem__(key, value)
+            path_set(key.get_path(), self, value)
+        else:
+            super(Item, self).__setitem__(key, value)
 
     def __setattr__(self, key, value):
         if isinstance(key, Field):
-            key = key.name
-        return super(Item, self).__setattr__(key, value)
+            path_set(key.get_path(), self, value)
+        else:
+            super(Item, self).__setattr__(key, value)
 
     def __delitem__(self, key):
         if isinstance(key, Field):
-            key = key.name
-        return super(Item, self).__delitem__(key)
+            path_del(key.get_path(), self)
+        else:
+            super(Item, self).__delitem__(key)
 
     def __delattr__(self, key):
         if isinstance(key, Field):
-            key = key.name
-        return super(Item, self).__delattr__(key)
+            path_del(key.get_path(), self)
+        else:
+            super(Item, self).__delattr__(key)
 
     def __contains__(self, key):
         if isinstance(key, Field):
-            key = key.name
-        return super(Item, self).__contains__(key)
+            return path_exists(key.get_path(), self)
+        else:
+            return super(Item, self).__contains__(key)
 
     def eval(self, expression):
         def _val(value):
             if isinstance(value, Field):
-                try:
-                    return self[value.name]
-                except KeyError:
-                    return None
+                return self[value]
             else:
                 return value
 

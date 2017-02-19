@@ -239,6 +239,9 @@ class KeyMapper(Processor):
 class FieldPicker(Processor):
     """
     Returns the item what only contains the provided fields
+
+    TODO: support for deep fields / list items
+    TODO: add option to flatten the selected fields
     """
 
     def __init__(self, *fields):
@@ -251,7 +254,7 @@ class FieldPicker(Processor):
         field_keys = []
         for field in self.fields:
             if isinstance(field, Field):
-                field_keys.append(field.get_name())
+                field_keys.append(field.get_path())
             elif isinstance(field, six.string_types):
                 field_keys.append(field)
 
@@ -265,6 +268,8 @@ class FieldPicker(Processor):
 class FieldOmitter(Processor):
     """
     Returns the item with the provided fields removed
+
+    TODO: support for deep fields / list items
     """
 
     def __init__(self, *fields):
@@ -277,7 +282,7 @@ class FieldOmitter(Processor):
         field_keys = []
         for field in self.fields:
             if isinstance(field, Field):
-                field_keys.append(field.get_name())
+                field_keys.append(field.get_path())
             elif isinstance(field, six.string_types):
                 field_keys.append(field)
 
