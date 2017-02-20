@@ -1,17 +1,76 @@
+import six
+import inspect
 import logging
 import json
-import six
 
-from chomper.exceptions import ItemNotImportable, ImporterMethodNotFound
+from chomper.items import Item, Selector
+from chomper.exceptions import ImporterMethodNotFound, DropField, DropItem
 from chomper.utils import smart_invoke
 
 
+VALID_FIELD_PROCESSOR_TYPES = (str, int, float, dict, list, bool, None, )
+
+
+def item_processor():
+    def _mark_func(func):
+        func.is_processor = True
+        func.accept_types = (Item,)
+        return func
+    return _mark_func
+
+
+def field_processor(*types):
+    def _mark_func(func):
+        for _type in types:
+            if _type not in VALID_FIELD_PROCESSOR_TYPES:
+                raise ValueError('Unsupported field type "%s"' % str(_type))
+        func.is_processor = True
+        func.accept_types = tuple(types) if types else VALID_FIELD_PROCESSOR_TYPES
+        return func
+    return _mark_func
+
+
+def type_name(item):
+    try:
+        return item.__name__
+    except AttributeError:
+        return type(item).__name__
+
+
+class ProcessorRegistry(type):
+
+    def __init__(cls, name, bases, atts):
+        cls._create_processor_map()
+        super(ProcessorRegistry, cls).__init__(name, bases, atts)
+
+    def _create_processor_map(cls):
+        processor_map = dict((type_name(_type), []) for _type in list(VALID_FIELD_PROCESSOR_TYPES) + [Item])
+
+        for types, name in cls._get_processor_methods():
+            for _type in types:
+                processor_map[type_name(_type)].append(name)
+
+        cls.PROCESSORS = processor_map
+
+    def _get_processor_methods(cls):
+        for name, method in inspect.getmembers(cls, predicate=inspect.ismethod):
+            is_processor = getattr(method, 'is_processor', False)
+            types = getattr(method, 'accept_types', [])
+            has_types = len(types) > 0
+            if is_processor and has_types:
+                yield types, name
+
+
+@six.add_metaclass(ProcessorRegistry)
 class Processor(object):
     """
     Base class for all pipeline processors
     """
 
-    def __init__(self, name=None, importer=None):
+    PROCESSORS = None
+
+    def __init__(self, selector, name=None, importer=None):
+        self.selector = Selector(selector)
         self.name = name if name else self.__class__.__name__
         self.importer = importer
 
@@ -39,16 +98,68 @@ class Processor(object):
         return item
 
     def process(self, item):
+        item = self._run_item_processors(item)
+        item = self._run_field_processors(item)
         return item
 
     def after_process(self, item):
         return item
 
-    def is_callable(self, func):
+    def _run_item_processors(self, item):
+        if Item in self.selector:
+            for processor_name in self._get_type_processors(Item):
+                processor = getattr(self, processor_name)
+                item = processor(item)
+        return item
+
+    def _run_field_processors(self, item):
+        for field in self.selector.iterfields():
+            key = field.get_key()
+            value = field.get_value(item)
+            key_changed = False
+
+            try:
+                for processor_name in self._get_type_processors(type(value)):
+                    processor = getattr(self, processor_name)
+                    result = processor(key, value, item)
+                    if isinstance(result, tuple):
+                        _key = key
+                        key, value = result
+                        key_changed = True if _key != key else key_changed
+                    else:
+                        value = result
+            except DropField:
+                del item[field]
+            else:
+                if key_changed:
+                    del item[field]
+                    field.replace_key(key)
+                item[field] = value
+
+        return item
+
+    def _valid_type(self, type):
+        return type in VALID_FIELD_PROCESSOR_TYPES
+
+    def _get_type_processors(self, _type):
+        try:
+            return self.PROCESSORS[type_name(_type)]
+        except KeyError:
+            return []
+
+    def _is_callable(self, func):
         from chomper.importers import ImporterMethod
         return callable(func) or isinstance(func, ImporterMethod)
 
-    def invoke_func(self, func, args):
+    def _resolve_arg(self, value, args=None):
+        if self._is_callable(value):
+            if args:
+                return self._invoke_func(value, args)
+            else:
+                return self._invoke_func(value)
+        return value
+
+    def _invoke_func(self, func, args):
         from chomper.importers import ImporterMethod
 
         if isinstance(func, ImporterMethod):
@@ -71,27 +182,37 @@ class Defaulter(Processor):
     All other falsy values will be skipped.
     """
 
-    def __init__(self, defaults):
-        super(Defaulter, self).__init__()
-        if defaults:
-            self.defaults = defaults
-        else:
-            raise ValueError('Default values were not provided or were an empty dict.')
+    def __init__(self, selector, defaults, **kwargs):
+        super(Defaulter, self).__init__(selector, **kwargs)
+        self.defaults = defaults
 
-    def process(self, item):
-        if self.is_callable(self.defaults):
-            defaults = self.invoke_func(self.defaults, [item])
-        else:
-            defaults = self.defaults
+    @item_processor()
+    def process_item(self, item):
+        return self._set_defaults(self._get_defaults(item), item)
 
+    @field_processor(dict)
+    def process_dict(self, key, value, item):
+        return key, self._set_defaults(self._get_defaults(item), value)
+
+    @field_processor(list, str, int, float, None)
+    def process_other(self, key, value, item):
+        return key, value if value is not None else self._get_defaults(item)
+
+    def _get_defaults(self, item):
+        return self._resolve_arg(self.defaults, [item])
+
+    def _set_defaults(self, defaults, obj):
         if not isinstance(defaults, dict):
             raise ValueError('Cannot assign default values as the source in not a dict.')
 
-        for key, default in six.iteritems(defaults):
-            if key not in item or item[key] is None:
-                item[key] = default
+        if obj is None:
+            obj = dict()
 
-        return item
+        for key, default in six.iteritems(defaults):
+            if key not in obj or obj[key] is None:
+                obj[key] = default
+
+        return obj
 
 
 class Assigner(Processor):
@@ -101,83 +222,58 @@ class Assigner(Processor):
     Value can be either static or a callable
     """
 
-    def __init__(self, field, value):
-        super(Assigner, self).__init__()
-        self.field = field
+    def __init__(self, selector, value, **kwargs):
+        super(Assigner, self).__init__(selector, **kwargs)
         self.value = value
 
-    def process(self, item):
-        if self.field in item:
-            self.logger.debug('Assign action will override an existing value for key "%s"' % self.field)
-
-        if self.is_callable(self.value):
-            item[self.field] = self.invoke_func(self.value, [item])
-        else:
-            item[self.field] = self.value
-
-        return item
+    @field_processor()
+    def assign_value(self, key, value, item):
+        return key, self._resolve_arg(self.value, [item])
 
 
-class ItemDropper(Processor):
+class Dropper(Processor):
     """
-    Drop an item if the expression evaluates true
+    Drop an item or field if the expression evaluates true
     """
 
-    def __init__(self, expression):
-        super(ItemDropper, self).__init__()
+    def __init__(self, selector, expression, **kwargs):
+        super(Dropper, self).__init__(selector, **kwargs)
         self.expression = expression
 
-    def process(self, item):
+    @item_processor()
+    def drop_item(self, item):
         if item.eval(self.expression):
-            raise ItemNotImportable('Item dropped as the provided expression "%s" evaluated to true.' % self.expression)
+            raise DropItem()
         return item
 
-
-class FieldDropper(Processor):
-    """
-    Removes a single field from a item the the provided expression evaluates to true
-    """
-
-    def __init__(self, field, expression):
-        super(FieldDropper, self).__init__()
-        self.field = field
-        self.expression = expression
-
-    def process(self, item):
+    @field_processor()
+    def drop_field(self, key, value, item):
         if item.eval(self.expression):
-            try:
-                del item[self.field]
-            except KeyError:
-                # Field has not been defined on the item
-                pass
-        return item
+            raise DropField()
+        return key, value
 
 
-class ValueFilter(Processor):
+class Filter(Processor):
     """
     Filter a single field value on an item
 
     Action is skipped if the field is not defined on the item
     """
 
-    def __init__(self, field, filter_func):
-        super(ValueFilter, self).__init__()
-        self.field = field
-        self.filter = filter_func
+    def __init__(self, selector, _filter, **kwargs):
+        super(Filter, self).__init__(selector, **kwargs)
+        self.filter = _filter
 
-    def process(self, item):
-        try:
-            value = item[self.field]
-            item[self.field] = self.invoke_func(self.filter, [value, item])
-        except KeyError:
-            self.logger.warn('Could not filter value as the field did not exist on the item.')
-        except TypeError:
-            self.logger.warn('Could not call filter as it was not a valid callable.')
-
-        return item
+    @field_processor()
+    def filter_value(self, key, value, item):
+        if value is None:
+            self.logger.info('Could not filter value as the field did not exist on the item.')
+            return key, value
+        else:
+            return key, self._invoke_func(self.filter, [value, item])
 
 
-class ValueMapper(Processor):
+class Mapper(Processor):
     """
     Map the values of an item field
 
@@ -185,120 +281,103 @@ class ValueMapper(Processor):
     Mapping dict keys are the search value; mapping values are the replacement
     """
 
-    def __init__(self, field, mapping):
-        super(ValueMapper, self).__init__()
-        self.field = field
+    KEYS = 'keys'
+    VALUES = 'values'
+
+    def __init__(self, selector, mapping, target=VALUES, **kwargs):
+        super(Mapper, self).__init__(selector, **kwargs)
         self.mapping = mapping
+        self.target = target
 
-        if not isinstance(mapping, dict) and not callable(mapping):
-            raise ValueError('Mapping argument must be a dict or a callable.')
+    @item_processor()
+    def map_item(self, item):
+        mapping = self._resolve_arg(self.mapping, [item])
+        return self._map_object(mapping, item)
 
-    def process(self, item):
-        if self.is_callable(self.mapping):
-            mapping = self.invoke_func(self.mapping, [item])
-        else:
-            mapping = self.mapping
+    @field_processor(dict, list)
+    def map_dict_or_list(self, key, value, item):
+        mapping = self._resolve_arg(self.mapping, [item])
+        return key, self._map_object(mapping, value)
 
+    @field_processor(str, int, float)
+    def map_other(self, key, value, item):
+        mapping = self._resolve_arg(self.mapping, [item])
         try:
-            value = item[self.field]
-            item[self.field] = mapping[value]
+            if self.target == self.KEYS:
+                key = mapping[key]
+            else:
+                value = mapping[value]
         except KeyError:
             pass
-        return item
+        return key, value
 
+    def _map_object(self, mapping, obj):
+        try:
+            items = six.iteritems(obj)
+        except AttributeError:
+            items = enumerate(obj)
 
-class KeyMapper(Processor):
-    """
-    Map the field keys on an item
-
-    If the current key is not defined on the item the new key will not be defined
-    """
-
-    def __init__(self, mapping):
-        super(KeyMapper, self).__init__()
-        self.mapping = mapping
-
-        if not isinstance(mapping, dict) and not callable(mapping):
-            raise ValueError('Mapping argument must be a dict or a callable that returns one.')
-
-    def process(self, item):
-        if self.is_callable(self.mapping):
-            mapping = self.invoke_func(self.mapping, [item])
-        else:
-            mapping = self.mapping
-
-        for current_key, new_key in six.iteritems(mapping):
+        for key, value in items:
             try:
-                item[new_key] = item[current_key]
-                del item[current_key]
+                if self.target == self.KEYS:
+                    map_key = mapping[key]
+                    key_val = obj[key]
+                    del obj[key]
+                    obj[map_key] = key_val
+                else:
+                    obj[key] = mapping[value]
             except KeyError:
                 continue
-        return item
+        return obj
 
 
-class FieldPicker(Processor):
+class Picker(Processor):
     """
     Returns the item what only contains the provided fields
 
-    TODO: support for deep fields / list items
-    TODO: add option to flatten the selected fields
+    TODO: add option to flatten the selected fields?
+    TODO: Add support for dict and list fields
     """
 
-    def __init__(self, *fields):
-        super(FieldPicker, self).__init__()
+    def __init__(self, selector, fields, **kwargs):
+        super(Picker, self).__init__(selector, **kwargs)
         self.fields = fields
 
-    def process(self, item):
-        from chomper.items import Field
-
-        field_keys = []
+    @item_processor()
+    def pick_item_fields(self, item):
+        _item = Item()
         for field in self.fields:
-            if isinstance(field, Field):
-                field_keys.append(field.get_path())
-            elif isinstance(field, six.string_types):
-                field_keys.append(field)
-
-        for key in list(item.keys()):
-            if key not in field_keys:
-                del item[key]
-
-        return item
+            if field in item:
+                _item[field] = item[field]
+        return _item
 
 
-class FieldOmitter(Processor):
+class Omitter(Processor):
     """
     Returns the item with the provided fields removed
 
-    TODO: support for deep fields / list items
+    TODO: Add support for dict and list fields
     """
 
-    def __init__(self, *fields):
-        super(FieldOmitter, self).__init__()
+    def __init__(self, selector, fields, **kwargs):
+        super(Omitter, self).__init__(selector, **kwargs)
         self.fields = fields
 
-    def process(self, item):
-        from chomper.items import Field
-
-        field_keys = []
+    @item_processor()
+    def omit_item_fields(self, item):
         for field in self.fields:
-            if isinstance(field, Field):
-                field_keys.append(field.get_path())
-            elif isinstance(field, six.string_types):
-                field_keys.append(field)
-
-        for key in list(item.keys()):
-            if key in field_keys:
-                del item[key]
-
+            if field in item:
+                del item[field]
         return item
 
 
 class Logger(Processor):
 
-    def __init__(self, level=logging.DEBUG):
-        super(Logger, self).__init__()
+    def __init__(self, selector, level=logging.DEBUG, **kwargs):
+        super(Logger, self).__init__(selector, kwargs)
         self.level = level
 
-    def __call__(self, item):
+    @item_processor()
+    def log_item(self, item):
         self.logger.log(self.level, json.dumps(item, indent=4, sort_keys=True))
         return item

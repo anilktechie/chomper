@@ -4,7 +4,7 @@ import time
 import logging
 from copy import copy
 from chomper.utils import smart_invoke
-from chomper.exceptions import ItemNotImportable, ImporterMethodNotFound
+from chomper.exceptions import ItemNotImportable, ImporterMethodNotFound, DropItem
 from chomper.items import Item
 
 
@@ -97,7 +97,7 @@ class Importer(object):
             else:
                 try:
                     next_result = self.invoke_action(action, [item])
-                except ItemNotImportable as e:
+                except (ItemNotImportable, DropItem) as e:
                     self.logger.info(e.message)
                     self.items_dropped += 1
                     continue

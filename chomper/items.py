@@ -1,7 +1,6 @@
-from six import add_metaclass
+import six
 
-from .processors import *
-from .utils import AttrDict, path_get, path_set, path_del, path_exists
+from .utils import AttrDict, path_split, path_get, path_set, path_del, path_exists
 
 
 OPS = ['EQ', 'NE', 'LT', 'LTE', 'GT', 'GTE', 'IN', 'NOT_IN']
@@ -62,6 +61,16 @@ class Field(object):
     def get_path(self):
         return self._path
 
+    def get_key(self):
+        return path_split(self.get_path()).pop()
+
+    def replace_key(self, key):
+        _path = path_split(self.get_path())
+        self._path = _path[:-1] + [key]
+
+    def get_value(self, item):
+        return item[self]
+
     def __getattr__(self, key):
         if key.startswith('__') and key.endswith('__'):
             return super(Field, self).__getattr__(key)
@@ -75,6 +84,7 @@ class Field(object):
         elif isinstance(key, int):
             self._path = '%s.[%d]' % (self._path, key)
         elif isinstance(key, slice):
+            # TODO: add support for field slices
             raise ValueError('Field slices are not supported.')
         return self
 
@@ -105,20 +115,24 @@ class Field(object):
     def is_not_in(self, right):
         return self.not_in(right)
 
-    def map(self, mapping):
-        return ValueMapper(self, mapping)
+    def map(self, mapping, **kwargs):
+        from .processors import Mapper
+        return Mapper(self, mapping, **kwargs)
 
     def filter(self, func):
-        return ValueFilter(self, func)
+        from .processors import Filter
+        return Filter(self, func)
 
     def assign(self, value, **kwargs):
+        from .processors import Assigner
         return Assigner(self, value, **kwargs)
 
     def set(self, *args, **kwargs):
         return self.assign(*args, **kwargs)
 
     def drop(self, expression):
-        return FieldDropper(self, expression)
+        from .processors import Dropper
+        return Dropper(self, expression)
 
 
 class ItemMetaclass(type):
@@ -130,34 +144,41 @@ class ItemMetaclass(type):
         return Field(key)
 
     def __setattr__(self, key, value):
-        return Assigner(getattr(self, key), value)
+        from .processors import Assigner
+        return Assigner(getattr(Item, key), value)
 
     @staticmethod
-    def defaults(*args, **kwargs):
-        return Defaulter(*args, **kwargs)
+    def defaults(defaults, **kwargs):
+        from .processors import Defaulter
+        return Defaulter(Item, defaults, **kwargs)
 
     @staticmethod
     def drop(expression):
-        return ItemDropper(expression)
+        from .processors import Dropper
+        return Dropper(Item, expression)
 
     @staticmethod
-    def map(*args, **kwargs):
-        return KeyMapper(*args, **kwargs)
+    def map(mapping, **kwargs):
+        from .processors import Mapper
+        return Mapper(Item, mapping, **kwargs)
 
     @staticmethod
-    def pick(**fields):
-        return FieldPicker(fields)
+    def pick(fields, **kwargs):
+        from .processors import Picker
+        return Picker(fields, **kwargs)
 
     @staticmethod
-    def omit(**fields):
-        return FieldOmitter(fields)
+    def omit(fields, **kwargs):
+        from .processors import Omitter
+        return Omitter(fields, **kwargs)
 
     @staticmethod
-    def log():
-        return Logger()
+    def log(*args, **kwargs):
+        from .processors import Logger
+        return Logger(Item, *args, **kwargs)
 
 
-@add_metaclass(ItemMetaclass)
+@six.add_metaclass(ItemMetaclass)
 class Item(AttrDict):
 
     def __repr__(self):
@@ -218,3 +239,35 @@ class Item(AttrDict):
             raise ValueError('Invalid expression operator "%s"' % expression.op)
 
         return fn(_val(expression.left), _val(expression.right))
+
+
+class Selector(object):
+
+    def __init__(self, selection):
+        if not isinstance(selection, list):
+            selection = [selection]
+
+        self.item = False
+        self.fields = []
+
+        for selector in selection:
+            if isinstance(selector, Field):
+                self.fields.append(selector)
+            elif selector == Item:
+                self.item = True
+            else:
+                # TODO should we handle field path strings here too?
+                continue
+
+    def __contains__(self, field):
+        if field == Item or isinstance(field, Item):
+            return self.item
+        elif isinstance(field, Field):
+            return field in self.fields
+        else:
+            # TODO should we handle field path strings here too?
+            return False
+
+    def iterfields(self):
+        for field in self.fields:
+            yield field
