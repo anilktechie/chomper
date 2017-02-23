@@ -2,10 +2,48 @@ import unittest
 
 from chomper import Item
 from chomper.exceptions import DropItem
-from chomper.processors import Defaulter, Assigner, Dropper, Filter, Mapper, Picker, Omitter
+from chomper.processors import Defaulter, Assigner, Dropper, Filter, Mapper, Picker, Omitter, item_processor, \
+    field_processor
 
 
 class ProcessorsTest(unittest.TestCase):
+
+    def test_item_processor_decorator(self):
+        def processor():
+            pass
+
+        dec = item_processor()
+        func = dec(processor)
+
+        self.assertTrue(func.is_processor)
+        self.assertEqual(func.accept_types, ('item',))
+
+    def test_field_processor_decorator(self):
+        def processor():
+            pass
+
+        dec_all = field_processor()
+        dec_dict = field_processor(dict)
+        dec_multiple = field_processor(str, None)
+
+        func_all = dec_all(processor)
+        all_types = func_all.accept_types
+        self.assertTrue(func_all.is_processor)
+        self.assertTrue('string' in all_types)
+        self.assertTrue('dict' in all_types)
+        self.assertTrue('list' in all_types)
+        self.assertTrue('none' in all_types)
+        self.assertTrue('boolean' in all_types)
+        self.assertTrue('item' not in all_types)
+
+        func_dict = dec_dict(processor)
+        self.assertTrue(func_dict.is_processor)
+        self.assertEqual(func_dict.accept_types, ('dict',))
+
+        func_multiple = dec_multiple(processor)
+        self.assertTrue(func_multiple.is_processor)
+        self.assertEqual(func_multiple.accept_types, ('string', 'none',))
+
 
     def test_defaulter(self):
         process = Defaulter(Item, dict(hello='world'))
