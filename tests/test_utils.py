@@ -1,7 +1,7 @@
 import unittest
 
 from chomper import Item
-from chomper.utils import path_split, path_get, path_set, path_del, path_exists
+from chomper.utils import type_name, path_split, path_get, path_set, path_del, path_exists
 
 
 class UtilsTest(unittest.TestCase):
@@ -19,6 +19,16 @@ class UtilsTest(unittest.TestCase):
                 }
             ]
         })
+
+    def test_type_name(self):
+        self.assertEqual(type_name({}), 'dict')
+        self.assertEqual(type_name('test'), 'string')
+        self.assertEqual(type_name(1), 'number')
+        self.assertEqual(type_name(0), 'number')
+        self.assertEqual(type_name(0.001), 'number')
+        self.assertEqual(type_name([]), 'list')
+        self.assertEqual(type_name(()), 'tuple')
+        self.assertEqual(type_name(None), 'none')
 
     def test_split_path(self):
         self.assertEqual(path_split(''), [])

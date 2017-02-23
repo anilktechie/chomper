@@ -5,36 +5,39 @@ import json
 
 from chomper.items import Item, Selector
 from chomper.exceptions import ImporterMethodNotFound, DropField, DropItem
-from chomper.utils import smart_invoke
+from chomper.utils import smart_invoke, type_name
 
 
-VALID_FIELD_PROCESSOR_TYPES = (str, int, float, dict, list, bool, None, )
+ITEM_TYPE = 'item'
+VALID_FIELD_PROCESSOR_TYPES = ('dict', 'list', 'string', 'number', 'boolean', 'none', )
 
 
 def item_processor():
     def _mark_func(func):
         func.is_processor = True
-        func.accept_types = (Item,)
+        func.accept_types = (ITEM_TYPE,)
         return func
     return _mark_func
 
 
 def field_processor(*types):
     def _mark_func(func):
+        _types = []
+
         for _type in types:
-            if _type not in VALID_FIELD_PROCESSOR_TYPES:
-                raise ValueError('Unsupported field type "%s"' % str(_type))
+            try:
+                name = type_name(_type)
+                assert name in VALID_FIELD_PROCESSOR_TYPES
+            except (AssertionError, TypeError):
+                raise ValueError('Unsupported field type for processor "%s"' % func.__name__)
+            else:
+                _types.append(name)
+
         func.is_processor = True
-        func.accept_types = tuple(types) if types else VALID_FIELD_PROCESSOR_TYPES
+        func.accept_types = tuple(_types) if len(_types) else VALID_FIELD_PROCESSOR_TYPES
         return func
+
     return _mark_func
-
-
-def type_name(item):
-    try:
-        return item.__name__
-    except AttributeError:
-        return type(item).__name__
 
 
 class ProcessorRegistry(type):
@@ -44,16 +47,16 @@ class ProcessorRegistry(type):
         super(ProcessorRegistry, cls).__init__(name, bases, atts)
 
     def _create_processor_map(cls):
-        processor_map = dict((type_name(_type), []) for _type in list(VALID_FIELD_PROCESSOR_TYPES) + [Item])
+        processor_map = dict((_type, []) for _type in list(VALID_FIELD_PROCESSOR_TYPES) + [ITEM_TYPE])
 
         for types, name in cls._get_processor_methods():
             for _type in types:
-                processor_map[type_name(_type)].append(name)
+                processor_map[_type].append(name)
 
         cls.PROCESSORS = processor_map
 
     def _get_processor_methods(cls):
-        for name, method in inspect.getmembers(cls, predicate=inspect.ismethod):
+        for name, method in inspect.getmembers(cls, predicate=lambda m: inspect.ismethod(m) or inspect.isfunction(m)):
             is_processor = getattr(method, 'is_processor', False)
             types = getattr(method, 'accept_types', [])
             has_types = len(types) > 0
@@ -138,13 +141,13 @@ class Processor(object):
 
         return item
 
-    def _valid_type(self, type):
-        return type in VALID_FIELD_PROCESSOR_TYPES
+    def _valid_type(self, _type):
+        return _type in VALID_FIELD_PROCESSOR_TYPES
 
     def _get_type_processors(self, _type):
         try:
             return self.PROCESSORS[type_name(_type)]
-        except KeyError:
+        except (TypeError, KeyError):
             return []
 
     def _is_callable(self, func):
@@ -153,10 +156,7 @@ class Processor(object):
 
     def _resolve_arg(self, value, args=None):
         if self._is_callable(value):
-            if args:
-                return self._invoke_func(value, args)
-            else:
-                return self._invoke_func(value)
+            return self._invoke_func(value, args)
         return value
 
     def _invoke_func(self, func, args):

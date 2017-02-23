@@ -3,6 +3,20 @@ import re
 import six
 
 
+TYPE_NAME_MAP = {
+    'Item': 'item',
+    'dict': 'dict',
+    'list': 'list',
+    'tuple': 'tuple',
+    'str': 'string',
+    'unicode': 'string',
+    'float': 'number',
+    'int': 'number',
+    'bool': 'boolean',
+    'NoneType': 'none'
+}
+
+
 class AttrDict(dict):
     """
     Dict-like object to allow accessing keys as attributes
@@ -16,17 +30,20 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
-def smart_invoke(func, args):
+def smart_invoke(func, args=None):
     """
     Invoke the provided function / callable with the correct number of arguments
     """
+    if args is None:
+        args = []
+
     if not (isinstance(args, list) or isinstance(args, tuple)):
         args = [args]
 
     try:
         spec = inspect.getargspec(func)
     except TypeError:
-        # inspect.getargspec does not support callable objects be default
+        # inspect.getargspec does not support callable objects by default
         if hasattr(func, '__call__'):
             spec = inspect.getargspec(func.__call__)
         else:
@@ -36,6 +53,25 @@ def smart_invoke(func, args):
     spec_args = [arg for arg in spec.args if arg not in ['self', 'cls']]
 
     return func(*args[:len(spec_args)])
+
+
+def type_name(_type):
+    """
+    Get the values type name as a string
+
+    Ints and floats will be grouped as 'number'
+    Different string types will all return 'string'
+    """
+    try:
+        assert isinstance(_type, type)
+        type_str = _type.__name__
+    except (AssertionError, AttributeError):
+        type_str = type(_type).__name__
+
+    try:
+        return TYPE_NAME_MAP[type_str]
+    except KeyError:
+        raise TypeError()
 
 
 def path_split(path_str):
