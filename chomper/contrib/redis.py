@@ -9,7 +9,7 @@ except ImportError:
     raise NotConfigured('Redis library not installed')
 
 
-class RedisFeed(Feeder):
+class RedisFeeder(Feeder):
     """
     Redis item feed
 
