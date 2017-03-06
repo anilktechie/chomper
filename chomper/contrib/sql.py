@@ -8,11 +8,11 @@ from chomper.feeders import Feeder
 from chomper.exporters import Exporter
 from chomper.processors import Processor
 from chomper.exceptions import NotConfigured
-from chomper.support import SignatureInterceptor
+from chomper.support.replay import Replayable
 
 try:
     from orator import DatabaseManager
-    from orator.query import QueryBuilder as OratorQueryBuilder
+    from orator.query import QueryBuilder
     from orator.support.collection import Collection
 except ImportError:
     raise NotConfigured('Orator library is required to use the SQL module.')
@@ -29,91 +29,54 @@ db_config = {
 }
 
 
-BUILDER_METHODS = (
-    'select', 'select_raw', 'add_select', 'distinct', 'from_',
-
-    'join', 'join_where', 'left_join', 'left_join_where', 'right_join', 'right_join_where',
-
-    'where', 'or_where', 'where_raw', 'or_where_raw', 'where_between', 'or_where_between', 'where_not_between',
-    'or_where_not_between', 'where_exists', 'or_where_exists', 'where_not_exists', 'or_where_not_exists', 'where_in',
-    'or_where_in', 'where_not_in', 'or_where_not_in', 'where_null', 'or_where_null', 'where_not_null',
-    'or_where_not_null', 'where_date', 'where_day', 'where_month', 'where_year',
-
-    'group_by', 'having', 'or_having', 'having_raw', 'or_having_raw',
-
-    'order_by', 'latest', 'oldest', 'order_by_raw', 'offset', 'skip', 'limit', 'take',
-
-    'find', 'pluck', 'first', 'get', 'chunk', 'lists', 'implode',
-
-    'exists', 'count', 'min', 'max', 'sum', 'avg', 'aggregate',
-
-    'insert', 'insert_get_id',
-
-    'update', 'increment', 'decrement',
-
-    'delete', 'truncate',
-
-    'raw'
-)
-
-UNSUPPORTED_BUILDER_METHODS = (
-    'select_sub', 'where_nested', 'for_page', 'union', 'union_all', 'lock', 'lock_for_update', 'shared_lock',
-    'to_sql', 'paginate', 'simple_paginate',
-)
+Query = Replayable(QueryBuilder)
 
 
-@six.add_metaclass(SignatureInterceptor)
-class Query(OratorQueryBuilder):
-    """
-    Wrapper around the Orator query builder
+class SqlAction(object):
 
-    Allows us to use item field references and expressions when building database queries.
-    """
+    def run_query(self, query, **context):
+        db = DatabaseManager(db_config)
+        live_query = db.connection().query()
+        return query.replay(live_query, self._signature_filter(context))
 
-    __intercept__ = BUILDER_METHODS
+    def iter_results(self, results):
+        for result in results:
+            # If the result is a collection then this is a chunked query
+            if isinstance(result, Collection):
+                for _result in result:
+                    yield self._load_item(_result)
+            else:
+                yield self._load_item(result)
 
-    def __init__(self, table, connection=None):
-        # Init the Orator QueryBuilder without the connection, grammar and processor
-        # We just need to make sure the connection is set before executing any database operations
-        super(Query, self).__init__(None, None, None)
+    def _load_item(self, row):
+        return Item(**dict((k, v) for k, v in row.items()))
 
-        self._context = dict()
+    def _signature_filter(self, context):
+        def signature_filter(signature):
+            item = context['item']
 
-        self.table = table
-        self.from_(self.table)
+            def _filter(args, key, value):
+                if isinstance(value, Item):
+                    args[key] = item
+                if isinstance(value, Field):
+                    args[key] = item[value]
 
-        if connection:
-            self.set_connection(connection)
+            for key, value in enumerate(signature.args):
+                _filter(signature.args, key, value)
 
-    def set_connection(self, connection):
-        self._connection = connection
-        self._grammar = connection.get_query_grammar()
-        self._processor = connection.get_post_processor()
+            for key, value in six.iteritems(signature.kwargs):
+                _filter(signature.kwargs, key, value)
 
-    def filter_signature(self, signature, context):
-        item = context.item
+            return signature
 
-        def _filter(args, key, value):
-            if isinstance(value, Item):
-                args[key] = item
-            if isinstance(value, Field):
-                args[key] = item[value]
-
-        for key, value in enumerate(signature.args):
-            _filter(signature.args, key, value)
-
-        for key, value in six.iteritems(signature.kwargs):
-            _filter(signature.kwargs, key, value)
-
-        return signature
+        return signature_filter
 
 
-class SqlFeeder(Feeder):
+class SqlFeeder(Feeder, SqlAction):
 
     def __init__(self, query):
         if isinstance(query, six.string_types):
-            table = Query(query)
-            table.get()
+            query = Query().from_(query).get()
 
         if not isinstance(query, Query):
             raise ValueError('SqlFeeder table must be a query object or a table name.')
@@ -121,79 +84,50 @@ class SqlFeeder(Feeder):
         self.query = query
 
     def __call__(self, item=None):
-        db = DatabaseManager(db_config)
-        self.query.set_connection(db.connection())
-        self.query.enable_execution()
-        items = self.feed(item)
-        self.query.disable_execution()
-        return items
+        return self.feed(item)
 
     def feed(self, item):
-        results = self.query.execute(item=item)
+        results = self.run_query(self.query)
         return self.iter_results(results)
 
-    def iter_results(self, results):
-        for result in results:
-            # If the result is a collection then this is a chunked query
-            if isinstance(result, Collection):
-                for _result in result:
-                    yield self.load_item(_result)
-            else:
-                yield self.load_item(result)
 
-    def load_item(self, row):
-        return Item(**dict((k, v) for k, v in row.items()))
-
-
-class SqlAssigner(Processor):
+class SqlAssigner(Processor, SqlAction):
 
     def __init__(self, selector):
         super(SqlAssigner, self).__init__(selector)
         raise NotImplementedError()
 
 
-class SqlTruncator(object):
+class SqlTruncator(SqlAction):
 
     def __init__(self, table):
-        self.query = Query(table)
-        self.query.truncate()
+        self.table = table
 
     def __call__(self, item):
-        self.query.enable_execution()
-        self.query.execute(item=item)
-        self.query.disable_execution()
+        self.run_query(Query().from_(self.table).truncate(), item=item)
         return item
 
 
-class SqlInserter(Exporter):
+class SqlInserter(Exporter, SqlAction):
 
     def __init__(self, table, id_field='id'):
         self.table = table
         self.id_field = id_field
 
     def export(self, item):
-        query = Query(self.table)
-        query.insert_get_id(item)
-
-        query.enable_execution()
-        _id = query.execute(item=item)
-        query.disable_execution()
-
+        _id = self.run_query(Query().from_(self.table).insert_get_id(item), item=item)
         if self.id_field:
             item[self.id_field] = _id
-
         return item
 
 
-class SqlUpdater(Exporter):
+class SqlUpdater(Exporter, SqlAction):
 
     def __init__(self, query):
         self.query = query
 
     def export(self, item):
-        self.query.enable_execution()
-        self.query.execute(item=item)
-        self.query.disable_execution()
+        self.run_query(self.query, item=item)
         return item
 
 

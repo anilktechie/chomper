@@ -13,6 +13,6 @@ class PostgresImporter(Importer):
 
     pipeline = [
         ListFeeder([dict(code='AHZ.AX'), dict(code='NEA.AX'), dict(code='CBA.AX')]),
-        SqlFeeder(Query('companies').where('symbol', Item.code).get()),
+        SqlFeeder(Query().from_('companies').where('symbol', Item.code).get()),
         Item.log()
     ]
