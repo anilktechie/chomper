@@ -122,7 +122,7 @@ class PostgresProcessor(Exporter):
             raise ItemNotImportable('Unable to insert item into Postgres database: \n%r.' % e.pgerror)
 
     def close(self):
-        # TODO: importer needs to call close on all exporters when finished processing
+        self.logger.info('Closing Postgres connection')
         self.connection.close()
 
 

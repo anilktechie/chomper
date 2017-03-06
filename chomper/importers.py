@@ -3,9 +3,10 @@ import six
 import time
 import logging
 from copy import copy
-from chomper.utils import smart_invoke
-from chomper.exceptions import ItemNotImportable, ImporterMethodNotFound, DropItem
+
+from chomper.exceptions import ImporterMethodNotFound, ItemNotImportable, DropItem
 from chomper.items import Item
+from chomper.utils import smart_invoke
 
 
 class ImporterMethod(object):
@@ -50,68 +51,55 @@ class Importer(object):
     def logger(self):
         return logging.getLogger(self.name)
 
-    def setup(self):
-        def _setup(actions):
-            for action in actions:
-                if isinstance(action, list):
-                    _setup(action)
-                else:
-                    action.set_importer(self)
-        _setup(self.pipeline)
-
     def run(self):
-        actions = copy(self.pipeline)
-        root_action = actions.pop(0)
-        result = self.invoke_action(root_action, [Item()])
+        self._traverse(Item(), copy(self.pipeline))
+        self.close()
 
-        self.run_actions(result, actions)
-
+    def close(self):
         if not self.close_when_idle:
             time.sleep(1)
             self.run()
         else:
-            # TODO: stats might need to be reset (if you call run() twice on the same instance)
-            # TODO: need to handle closing pipeline actions here (eg. close database connections)
-            self.logger.info('Importer finished, %d items were imported and %d were dropped' %
-                             (self.items_processed, self.items_dropped))
+            self._close_actions(self.pipeline)
 
-    def run_actions(self, result, actions):
-        # TODO: Refactor all of this; way to messy
-        action = actions.pop(0)
-        is_generator = isinstance(result, types.GeneratorType)
-        is_list = isinstance(result, list) or isinstance(result, tuple)
-
-        if not is_generator and not is_list:
-            result = [result]
-
-        for item in result:
-            if item is None:
-                continue
-
-            # Execute child pipelines
+    def _close_actions(self, actions):
+        for action in actions:
             if isinstance(action, list):
-                # Child pipelines don't return a result to the parent pipeline or
-                # manipulate the item in parent pipeline
-                next_result = copy(item)
-                self.run_actions(item, copy(action))
+                self._close_actions(action)
             else:
                 try:
-                    next_result = self.invoke_action(action, [item])
-                except (ItemNotImportable, DropItem) as e:
-                    self.logger.info(e.message)
-                    self.items_dropped += 1
+                    action.close()
+                except AttributeError:
                     continue
 
-            if len(actions):
-                self.run_actions(next_result, copy(actions))
-            else:
-                self.items_processed += 1
+    def _traverse(self, item, actions):
+        try:
+            action = actions.pop(0)
+        except IndexError:
+            self.items_processed += 1
+        else:
+            for item in self._make_iterable(item):
+                if isinstance(action, list):
+                    self._traverse(copy(item), copy(actions))
+                else:
+                    result = self._invoke_action(action, [item, self])
+                    self._traverse(result, copy(actions))
 
-    def invoke_action(self, action, action_args):
+    @staticmethod
+    def _make_iterable(item):
+        is_generator = isinstance(item, types.GeneratorType)
+        is_list = isinstance(item, list) or isinstance(item, tuple)
+        return [item for item in (item if is_list or is_generator else [item]) if item is not None]
+
+    def _invoke_action(self, action, action_args):
         if callable(action):
-            return smart_invoke(action, action_args)
-        elif isinstance(action, six.string_types) and hasattr(self, action):
-            return smart_invoke(getattr(self, action), action_args)
+            try:
+                return smart_invoke(action, action_args)
+            except DropItem:
+                self.items_dropped += 1
+            except ItemNotImportable as e:
+                self.logger.error(e.message)
+                self.items_dropped += 1
         else:
             self.logger.warn('Action "%s" could not be called. Must be a callable or importer method.' % action)
 

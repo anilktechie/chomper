@@ -9,3 +9,6 @@ class Exporter(object):
     @property
     def logger(self):
         return logging.getLogger(type(self).__name__)
+
+    def close(self):
+        pass

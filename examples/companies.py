@@ -1,7 +1,9 @@
+import logging
 from chomper import Importer, Item, set_config
 from chomper.feeders import CsvFeeder
 from chomper.contrib.postgres import *
 
+logging.basicConfig(level=logging.DEBUG)
 set_config('postgres', dict(database='test', user='postgres', password='postgres'))
 
 
