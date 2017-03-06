@@ -76,7 +76,9 @@ class Processor(object):
         self.name = name if name else self.__class__.__name__
         self.importer = importer
 
-    def __call__(self, item):
+    def __call__(self, item, importer=None):
+        # TODO: this seems like a bad idea
+        self.importer = importer
         if not self.should_process(item):
             return item
         item = self.before_process(item)
@@ -86,12 +88,6 @@ class Processor(object):
     @property
     def logger(self):
         return logging.getLogger(type(self).__name__)
-
-    def get_importer(self):
-        return self.importer
-
-    def set_importer(self, importer):
-        self.importer = importer
 
     def should_process(self, item):
         return True

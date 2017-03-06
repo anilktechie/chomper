@@ -15,3 +15,6 @@ class Exporter(object):
 
     def export(self, item):
         raise NotImplementedError('All exporters must implement the "export" method')
+
+    def close(self):
+        pass
