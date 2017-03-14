@@ -128,7 +128,7 @@ print item['title'] # "Hello World"
 Accessing a field on the `Item` class will return a `Field` reference object. This field reference can be used to get, set and delete a field on an item instance. It can also be used to create expressions. Field references should also be used instead of key strings as they are more explicit.
 
 ```python
-item = item({
+item = Item({
     'title': 'Community',
     'cast': [
         {
@@ -172,9 +172,9 @@ There are several processers included with Chomper to help with transforming ite
 `Picker`: Drop any item fields that are not in the provided list  
 `Omitter`: Drop any item fields in the provided list  
 
-All processers accept a selector (either a Field instance or Item class) that defines what data it would be manipulating.
+All processers accept a selector (either a Field instance or the Item class) that defines what data should be manipulated.
 
-For example if the `Dropper` processor recieves `Item` as the selector the entire item will be dropped if the express evaluates to true.
+For example if the `Dropper` processor recieves `Item` as the selector the entire item will be dropped if the expression evaluates to true.
 
 ```python
 processor = Dropper(Item, Items.country == 'Australia')
@@ -192,7 +192,7 @@ item = processor(Item(country='Australia'))
 
 ### Shortcuts
 
-Most core processors also add shortcut methods to the `Item` and `Field` objects. This helps to avoid long import statments and improve the readability of actions.
+Most core processors also add shortcut methods to the `Item` class and `Field` objects. This helps to avoid long import statments and improve the readability of processors.
 
 For example;
 
@@ -304,4 +304,3 @@ def Uppercaser(Processor):
     def uppercase_list_values(self, key, value, item):
         return key, [v.upper() for v in value]
 ```
-
