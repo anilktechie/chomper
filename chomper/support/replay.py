@@ -1,5 +1,5 @@
 import inspect
-from copy import deepcopy, copy
+from copy import copy, deepcopy
 
 from chomper.utils import iter_methods
 
@@ -38,25 +38,33 @@ def _make_replaced_method(name):
     return record
 
 
+def _add_methods(cls):
+    def iter_signatures(self):
+        return (sig for sig in self._signatures)
+    iter_signatures.__name__ = '__iter__'
+    setattr(cls, '__iter__', iter_signatures)
+
+
 def Replayable(cls):
     cls_clone = type('Replayable%s' % cls.__name__, cls.__bases__, dict(cls.__dict__))
     _replace_init(cls_clone)
     _replace_methods(cls_clone)
+    _add_methods(cls_clone)
     return cls_clone
 
 
 def replay(recorder, target, filter=None):
     _result = None
-    signatures = deepcopy(recorder._signatures)
     is_class = inspect.isclass(target)
 
-    # If it's an instance remove the initial signature for calling __init__
-    if not is_class:
-        signatures.pop(0)
+    for idx, signature in enumerate(recorder):
+        # If it's an instance remove the initial signature for calling __init__
+        if idx == 0 and not is_class:
+            continue
 
-    for signature in signatures:
         if callable(filter):
-            signature = filter(signature)
+            signature = filter(deepcopy(signature))
+
         func = getattr(target, signature.name)
         _result = func(*signature.args, **signature.kwargs)
 
