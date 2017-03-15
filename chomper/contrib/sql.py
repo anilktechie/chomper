@@ -1,59 +1,89 @@
 from __future__ import absolute_import
 
 import six
+from orator.connectors.postgres_connector import DictRow
 
 from chomper import Item, config
 from chomper.items import Field
 from chomper.feeders import Feeder
 from chomper.exporters import Exporter
-from chomper.processors import Processor
+from chomper.processors import Processor, item_processor, field_processor
 from chomper.exceptions import NotConfigured
-from chomper.support.replay import Replayable
+from chomper.support.replay import Replayable, replay
 
 try:
-    from orator import DatabaseManager
+    from orator import DatabaseManager as BaseDatabaseManager
     from orator.query import QueryBuilder
     from orator.support.collection import Collection
 except ImportError:
     raise NotConfigured('Orator library is required to use the SQL module.')
 
 
-db_config = {
-    'pgsql': {
-        'driver': 'pgsql',
-        'database': 'test',
-        'user': 'postgres',
-        'password': 'postgres',
-        'log_queries': True
-    }
-}
+class DatabaseManager(BaseDatabaseManager):
+
+    def set_connection_config(self, name, connection):
+        if name not in self._config:
+            self._config[name] = connection
 
 
+database = DatabaseManager({})
 Query = Replayable(QueryBuilder)
 
 
-class SqlAction(object):
+class SqlMixin(object):
+
+    driver_name = None
+    connection_name = None
+
+    def __init__(self, *args, **kwargs):
+        default_connection_name = getattr(self.__class__, 'connection_name')
+        default_connection_config = config.getdict(default_connection_name)
+
+        self.connection_name = kwargs.pop('connection_name', default_connection_name)
+        self.connection_config = kwargs.pop('connection', default_connection_config)
+
+        if 'driver' not in self.connection_config:
+            self.connection_config['driver'] = self.driver_name
+
+        database.set_connection_config(self.connection_name, self.connection_config)
+
+        super(SqlMixin, self).__init__(*args, **kwargs)
+
+    def get_connection(self):
+        return database.connection(self.connection_name)
 
     def run_query(self, query, **context):
-        db = DatabaseManager(db_config)
-        live_query = db.connection().query()
-        return query.replay(live_query, self._signature_filter(context))
+        live_query = self.get_connection().query()
+        return replay(query, live_query, self._signature_filter(context))
 
-    def iter_results(self, results):
+    @staticmethod
+    def row_to_dict(obj):
+        """
+        Convert a Orator DictRow object to a dict
+        """
+        if isinstance(object, dict):
+            return obj
+        if not isinstance(obj, DictRow):
+            raise ValueError('Attempted to convert non DictRow object to dict.')
+        return dict((k, v) for k, v in obj.items())
+
+    @classmethod
+    def iter_results(cls, results):
+        """
+        Iterate over rows in an Orator results collection.
+
+        Also needs to handle chuncked queries.
+        """
         for result in results:
-            # If the result is a collection then this is a chunked query
             if isinstance(result, Collection):
                 for _result in result:
-                    yield self._load_item(_result)
+                    yield cls.row_to_dict(_result)
             else:
-                yield self._load_item(result)
-
-    def _load_item(self, row):
-        return Item(**dict((k, v) for k, v in row.items()))
+                yield cls.row_to_dict(result)
 
     def _signature_filter(self, context):
         def signature_filter(signature):
-            item = context['item']
+            item = context.get('item')
 
             def _filter(args, key, value):
                 if isinstance(value, Item):
@@ -72,11 +102,28 @@ class SqlAction(object):
         return signature_filter
 
 
-class SqlFeeder(Feeder, SqlAction):
+class SqlProcessor(SqlMixin, Processor):
 
-    def __init__(self, query):
+    pass
+
+
+class SqlExporter(SqlMixin, Exporter):
+
+    pass
+
+
+class SqlFeeder(SqlMixin, Feeder):
+
+    def __init__(self, query, chunk_size=100, *args, **kwargs):
+        super(SqlFeeder, self).__init__(*args, **kwargs)
+
+        # Do we need to build a query from the table name?
         if isinstance(query, six.string_types):
-            query = Query().from_(query).get()
+            query = Query().from_(query)
+            if not chunk_size or chunk_size < 1:
+                query.get()
+            else:
+                query.chunk(chunk_size)
 
         if not isinstance(query, Query):
             raise ValueError('SqlFeeder table must be a query object or a table name.')
@@ -87,20 +134,18 @@ class SqlFeeder(Feeder, SqlAction):
         return self.feed(item)
 
     def feed(self, item):
-        results = self.run_query(self.query)
-        return self.iter_results(results)
+        results = self.run_query(self.query, item=item)
+        for result in self.iter_results(results):
+            yield self._load_item(result)
+
+    def _load_item(self, row):
+        return Item(**dict((k, v) for k, v in row.items()))
 
 
-class SqlAssigner(Processor, SqlAction):
+class SqlTruncator(SqlMixin):
 
-    def __init__(self, selector):
-        super(SqlAssigner, self).__init__(selector)
-        raise NotImplementedError()
-
-
-class SqlTruncator(SqlAction):
-
-    def __init__(self, table):
+    def __init__(self, table, *args, **kwargs):
+        super(SqlTruncator, self).__init__(*args, **kwargs)
         self.table = table
 
     def __call__(self, item):
@@ -108,9 +153,10 @@ class SqlTruncator(SqlAction):
         return item
 
 
-class SqlInserter(Exporter, SqlAction):
+class SqlInserter(SqlExporter):
 
-    def __init__(self, table, id_field='id'):
+    def __init__(self, table, id_field='id', *args, **kwargs):
+        super(SqlInserter, self).__init__(*args, **kwargs)
         self.table = table
         self.id_field = id_field
 
@@ -121,9 +167,10 @@ class SqlInserter(Exporter, SqlAction):
         return item
 
 
-class SqlUpdater(Exporter, SqlAction):
+class SqlUpdater(SqlExporter):
 
-    def __init__(self, query):
+    def __init__(self, query, *args, **kwargs):
+        super(SqlUpdater, self).__init__(*args, **kwargs)
         self.query = query
 
     def export(self, item):
@@ -131,22 +178,9 @@ class SqlUpdater(Exporter, SqlAction):
         return item
 
 
-class SqlUpserter(Exporter):
+class SqlUpserter(SqlExporter):
 
-    def __init__(self, table, identifiers=None, columns=None, _listeners=None, **listeners):
-        """
-        Upsert rows in a Postgres database
-
-        NOTE: this upsert implementation isn't perfect; it is susceptible to some race conditions
-            (see: https://www.depesz.com/2012/06/10/why-is-upsert-so-complicated/)
-
-        TODO: batch upsert using Postgres COPY from a csv file
-            (example: https://gist.github.com/luke/5697511)
-
-        :param table: The database table name
-        :param identifiers: List of column names used to identify an item as unique (used in SQL where clause)
-        :param columns: List of columns to be updated. By default all fields on the item are updated (if match columns)
-        """
+    def __init__(self, table, identifiers=('id',), columns=None, listeners=None, *args, **kwargs):
         if isinstance(identifiers, six.string_types):
             identifiers = [identifiers]
 
@@ -157,21 +191,95 @@ class SqlUpserter(Exporter):
         if not columns:
             columns = self._table_columns(table)
 
-        # By default, try to update on the item's id
-        if not identifiers:
-            self.identifiers = ['id']
-
         self.table = table
         self.identifiers = identifiers
         self.columns = columns
 
         # Find any change listeners in kwargs (Eg. on_update, on_insert, on_title_change)
-        self.listeners = {key: listeners.pop(key) for key in listeners.keys() if key[:3] == 'on_'}
-        if _listeners is not None:
-            self.listeners.update(_listeners)
+        self.listeners = {key: kwargs.pop(key) for key in kwargs.keys() if key[:3] == 'on_'}
+        if listeners is not None:
+            self.listeners.update(listeners)
+
+        super(SqlUpserter, self).__init__(*args, **kwargs)
 
     def export(self, item):
         pass
 
     def _table_columns(self, table):
-        sql = 'SELECT column_name FROM information_schema.columns WHERE table_name = %s'
+        raise NotImplementedError()
+
+
+class SqlAssigner(SqlProcessor):
+
+    def __init__(self, selector, query, **kwargs):
+        super(SqlAssigner, self).__init__(selector, **kwargs)
+        self.query = query
+
+    @item_processor()
+    def assign_item(self, item):
+        result = self.run_query(self.query, item=item)
+
+        if isinstance(result, Collection):
+            try:
+                result = result[0]
+            except IndexError:
+                self.logger.warning('Query returned more then one result. Only the first result will be used.')
+
+        if isinstance(result, DictRow):
+            result = self.row_to_dict(result)
+
+        if isinstance(result, dict):
+            for key, value in six.iteritems(result):
+                item[key] = value
+        else:
+            self.logger.warning('Could not assign query result to item as the query did not return a result.')
+
+        return item
+
+    @field_processor()
+    def assign_field(self, key, value, item):
+        result = self.run_query(self.query, item=item)
+
+        if isinstance(result, Collection):
+            result = list(result)
+
+        if isinstance(result, DictRow):
+            result = self.row_to_dict(result)
+
+        return key, result
+
+
+class PostgresFeeder(SqlFeeder):
+
+    connection_name = 'postgres'
+    driver_name = 'postgres'
+
+
+class PostgresInserter(SqlInserter):
+
+    connection_name = 'postgres'
+    driver_name = 'postgres'
+
+
+class PostgresTruncator(SqlTruncator):
+
+    connection_name = 'postgres'
+    driver_name = 'postgres'
+
+
+class PostgresUpdater(SqlUpdater):
+
+    connection_name = 'postgres'
+    driver_name = 'postgres'
+
+
+class PostgresUpserter(SqlUpserter):
+
+    connection_name = 'postgres'
+    driver_name = 'postgres'
+
+
+class PostgresAssigner(SqlAssigner):
+
+    connection_name = 'postgres'
+    driver_name = 'postgres'
