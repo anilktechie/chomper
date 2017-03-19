@@ -83,7 +83,8 @@ class Importer(object):
                     self._traverse(copy(item), copy(actions))
                 else:
                     result = self._invoke_action(action, [item, self])
-                    self._traverse(result, copy(actions))
+                    if result:
+                        self._traverse(result, copy(actions))
 
     @staticmethod
     def _make_iterable(item):
