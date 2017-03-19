@@ -30,6 +30,11 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
+def iter_methods(cls):
+    for name, method in inspect.getmembers(cls, predicate=lambda m: inspect.ismethod(m) or inspect.isfunction(m)):
+        yield name, method
+
+
 def smart_invoke(func, args=None):
     """
     Invoke the provided function / callable with the correct number of arguments

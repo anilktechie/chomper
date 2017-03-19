@@ -1,10 +1,10 @@
 import logging
-from chomper import Importer, Item, set_config
+from chomper import Importer, Item, config
 from chomper.feeders import CsvFeeder
-from chomper.contrib.postgres import *
+from chomper.contrib.postgres import PostgresUpserter, PostgresTruncator
 
 logging.basicConfig(level=logging.DEBUG)
-set_config('postgres', dict(database='test', user='postgres', password='postgres'))
+config.set_section('postgres', dict(database='test', user='postgres', password='postgres'))
 
 
 class AsxCompaniesImporter(Importer):

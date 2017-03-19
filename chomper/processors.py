@@ -1,11 +1,10 @@
 import six
-import inspect
 import logging
 import json
 
 from chomper.items import Item, Selector
 from chomper.exceptions import ImporterMethodNotFound, DropField, DropItem
-from chomper.utils import smart_invoke, type_name
+from chomper.utils import smart_invoke, type_name, iter_methods
 
 
 ITEM_TYPE = 'item'
@@ -56,7 +55,7 @@ class ProcessorRegistry(type):
         cls.PROCESSORS = processor_map
 
     def _get_processor_methods(cls):
-        for name, method in inspect.getmembers(cls, predicate=lambda m: inspect.ismethod(m) or inspect.isfunction(m)):
+        for name, method in iter_methods(cls):
             is_processor = getattr(method, 'is_processor', False)
             types = getattr(method, 'accept_types', [])
             has_types = len(types) > 0
