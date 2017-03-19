@@ -30,6 +30,9 @@ class Reader(object):
 
     schemes = None
 
+    def read(self):
+        raise NotImplementedError()
+
     @classmethod
     def from_uri(cls, uri, *args, **kwargs):
         return cls(Resource(uri), *args, **kwargs)

@@ -9,7 +9,7 @@ except ImportError:
 
 from chomper import Item
 from chomper.exceptions import ItemNotImportable
-from chomper.readers import FileReader, HttpReader
+from chomper.readers import Reader, FileReader, HttpReader
 
 
 class Feeder(object):
@@ -34,9 +34,13 @@ class Feeder(object):
         raise NotImplementedError('Item feeders must implement feed method.')
 
     def get_reader(self, uri, **kwargs):
+        if isinstance(uri, Reader):
+            return uri
+
         for ReaderCls in self.enabled_readers:
             if ReaderCls.can_read(uri):
                 return ReaderCls.from_uri(uri, **kwargs)
+
         raise ValueError('Unsupported URI protocol for "%s"' % uri)
 
 
