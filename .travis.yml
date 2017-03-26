@@ -9,9 +9,7 @@ services:
   - postgresql
 
 env:
-  - POSTGRES_DATABASE="chomper_test"
-  - POSTGRES_USER="postgres"
-  - POSTGRES_PASSWORD=""
+  - POSTGRES_DATABASE="chomper_test" POSTGRES_USER="postgres" POSTGRES_PASSWORD=""
 
 install:
   - pip install -r requirements.txt
