@@ -5,7 +5,18 @@ python:
   - "3.3"
   - "3.4"
 
+services:
+  - postgresql
+
+env:
+  - POSTGRES_DATABASE="chomper_test"
+  - POSTGRES_USER="postgres"
+  - POSTGRES_PASSWORD=""
+
 install:
   - pip install -r requirements.txt
+
+before_script:
+  - psql -c 'create database chomper_test;' -U postgres
 
 script: pytest

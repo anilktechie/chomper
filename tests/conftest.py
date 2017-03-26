@@ -1,4 +1,6 @@
+import os
 import logging
+
 from orator import DatabaseManager
 
 from chomper import config
@@ -12,9 +14,9 @@ db_config = {
     'postgres': {
         'driver': 'pgsql',
         'host': 'localhost',
-        'database': 'chomper_test',
-        'user': 'postgres',
-        'password': 'postgres',
+        'database': os.getenv('POSTGRES_DATABASE', 'chomper_test'),
+        'user': os.getenv('POSTGRES_USER', 'postgres'),
+        'password': os.getenv('POSTGRES_PASSWORD', 'postgres'),
         'prefix': ''
     }
 }
