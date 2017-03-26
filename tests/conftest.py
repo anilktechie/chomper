@@ -21,7 +21,7 @@ db_config = {
     }
 }
 
-config.set_section('sql', dict(default='postgres'))
-config.set_section('postgres', db_config['postgres'])
+config['sql'] = dict(default='postgres')
+config['postgres'] = db_config['postgres']
 
 db = DatabaseManager(db_config)

@@ -4,7 +4,7 @@ from chomper.feeders import CsvFeeder
 from chomper.contrib.postgres import PostgresUpserter, PostgresTruncator
 
 logging.basicConfig(level=logging.DEBUG)
-config.set_section('postgres', dict(database='test', user='postgres', password='postgres'))
+config['postgres'] = dict(database='test', user='postgres', password='postgres')
 
 
 class AsxCompaniesImporter(Importer):

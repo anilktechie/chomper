@@ -11,6 +11,7 @@ setup(
     author_email='sam@sammilledge.com',
     description='',
     install_requires=[
-        'six>=1.10.0'
+        'six>=1.10.0',
+        'configparser>=3.5.0'
     ]
 )
