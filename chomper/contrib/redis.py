@@ -10,7 +10,7 @@ except ImportError:
     raise NotConfigured('Redis library not installed')
 
 
-class RedisReader(Reader):
+class QueueReader(Reader):
     """
     Redis queue reader
 
