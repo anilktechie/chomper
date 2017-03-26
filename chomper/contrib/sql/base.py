@@ -90,7 +90,7 @@ class SqlBase(GenerativeBase):
             user=config.get(connection_name, 'user'),
             password=config.get(connection_name, 'password'),
             prefix=config.get(connection_name, 'prefix', ''),
-            log_queries=config.get(connection_name, 'log_queries', False)
+            log_queries=config.getboolean(connection_name, 'log_queries', False)
         )
 
     def _get_connection(self):
