@@ -1,3 +1,5 @@
+from datetime import datetime
+from pytz import timezone
 import six
 
 from ...exporters import Exporter
@@ -62,10 +64,11 @@ class SqlExporterBase(SqlBase, Exporter):
     def _build_update_query(self, item):
         q = Query().from_(self._table)
         q = self._build_where_clause(q, item)
-        return q.update(self._prepare_fields(item))
+        return q.update(self._prepare_fields(item, timestamps=self._timestamps))
 
     def _build_insert_query(self, item):
-        return Query().from_(self._table).insert_get_id(self._prepare_fields(item))
+        data = self._prepare_fields(item, timestamps=self._timestamps, inserting=True)
+        return Query().from_(self._table).insert_get_id(data)
 
     def _build_where_clause(self, query, item):
         try:
@@ -98,12 +101,23 @@ class SqlExporterBase(SqlBase, Exporter):
 
         return columns
 
-    def _prepare_fields(self, item):
+    def _prepare_fields(self, item, timestamps=False, inserting=False):
         """
         Return a dict of data that only contains fields that can be safely inserted into the table
         """
         fields = self._get_exportable_fields()
-        return dict((key, value) for key, value in six.iteritems(item) if key in fields)
+        data = dict((key, value) for key, value in six.iteritems(item) if key in fields)
+
+        if timestamps:
+            data[self._updated_at_column] = self._get_timestamp()
+
+        if timestamps and inserting:
+            data[self._created_at_column] = self._get_timestamp()
+
+        return data
+
+    def _get_timestamp(self):
+        return datetime.now(timezone(self._timestamps_timezone))
 
 
 class Inserter(SqlExporterBase):

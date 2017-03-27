@@ -1,3 +1,6 @@
+from datetime import datetime
+from pytz import timezone
+
 try:
     from unittest.mock import MagicMock
 except ImportError:
@@ -94,11 +97,10 @@ class SqlUpserterTest(SqlTestCaseBase):
         self._execute_sql_file('tests/fixtures/test_sql_postgres_upserter.sql')
 
     def test_postgres_upserter(self):
-        upserter = Upserter('upserter_test').identifiers('first_name')
+        upserter = Upserter('upserter_test').identifiers('first_name').timestamps()
 
         item1 = Item(first_name='Jeff', last_name='Winger', age=32)
         item2 = Item(first_name='Annie', last_name='Edison', age=23, missing_column=True)
-
         upserter(item1)
         upserter(item2)
 
@@ -111,6 +113,21 @@ class SqlUpserterTest(SqlTestCaseBase):
         self.assertEqual(rows[1][1], item2.first_name)
         self.assertEqual(rows[1][2], item2.last_name)
         self.assertEqual(rows[1][3], item2.age)
+
+    def test_postgres_upserter_timestamps(self):
+        started_at = datetime.now(timezone('UTC'))
+        upserter = Upserter('upserter_test').identifiers('first_name').timestamps()
+
+        upserter(Item(first_name='Jeff'))
+        upserter(Item(first_name='Annie'))
+
+        rows = self.db.select('SELECT * from upserter_test')
+
+        self.assertEqual(rows[0][4], datetime(2017, 1, 1, 0, 0, 0, 0, timezone('UTC')))
+        self.assertNotEqual(rows[0][5], datetime(2017, 1, 1, 0, 0, 0, 0, timezone('UTC')))
+        self.assertTrue(rows[0][5] >= started_at)
+        self.assertTrue(rows[1][4] >= started_at)
+        self.assertTrue(rows[1][5] >= started_at)
 
     def test_postgres_upserter_insert_listener(self):
         on_insert = MagicMock()

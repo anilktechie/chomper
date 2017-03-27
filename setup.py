@@ -12,6 +12,7 @@ setup(
     description='',
     install_requires=[
         'six>=1.10.0',
-        'configparser>=3.5.0'
+        'configparser>=3.5.0',
+        'pytz>=2016.10'
     ]
 )
