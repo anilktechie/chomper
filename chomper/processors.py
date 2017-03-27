@@ -276,13 +276,9 @@ class Mapper(Processor):
     Mapping dict keys are the search value; mapping values are the replacement
     """
 
-    KEYS = 'keys'
-    VALUES = 'values'
-
-    def __init__(self, selector, mapping, target=VALUES, **kwargs):
+    def __init__(self, selector, mapping, **kwargs):
         super(Mapper, self).__init__(selector, **kwargs)
         self.mapping = mapping
-        self.target = target
 
     @item_processor()
     def map_item(self, item):
@@ -298,10 +294,7 @@ class Mapper(Processor):
     def map_other(self, key, value, item):
         mapping = self._resolve_arg(self.mapping, [item])
         try:
-            if self.target == self.KEYS:
-                key = mapping[key]
-            else:
-                value = mapping[value]
+            value = mapping[value]
         except KeyError:
             pass
         return key, value
@@ -314,13 +307,10 @@ class Mapper(Processor):
 
         for key, value in items:
             try:
-                if self.target == self.KEYS:
-                    map_key = mapping[key]
-                    key_val = obj[key]
-                    del obj[key]
-                    obj[map_key] = key_val
-                else:
-                    obj[key] = mapping[value]
+                map_key = mapping[key]
+                key_val = obj[key]
+                del obj[key]
+                obj[map_key] = key_val
             except KeyError:
                 continue
         return obj

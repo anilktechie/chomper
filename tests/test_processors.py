@@ -136,7 +136,7 @@ class ProcessorsTest(unittest.TestCase):
             'field5': 'field6'
         }
 
-        process = Mapper(Item, mapping, target=Mapper.KEYS)
+        process = Mapper(Item, mapping)
         item = Item(field1='value', field3='value', field7='value')
         processed_item = process(item)
 
@@ -151,7 +151,7 @@ class ProcessorsTest(unittest.TestCase):
 
         self.assertTrue(hasattr(processed_item, 'field7'))
 
-        process_func = Mapper(Item, lambda: mapping, target=Mapper.KEYS)
+        process_func = Mapper(Item, lambda: mapping)
         item_func = Item(field1='value')
         processed_item_func = process_func(item_func)
 
