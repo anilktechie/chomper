@@ -52,15 +52,17 @@ class Importer(object):
         return logging.getLogger(self.name)
 
     def run(self):
-        self._traverse(Item(), copy(self.pipeline))
+        while True:
+            self._traverse(Item(), copy(self.pipeline))
+            if self.close_when_idle:
+                break
+            else:
+                time.sleep(1)
+                continue
         self.close()
 
     def close(self):
-        if not self.close_when_idle:
-            time.sleep(1)
-            self.run()
-        else:
-            self._close_actions(self.pipeline)
+        self._close_actions(self.pipeline)
 
     def _close_actions(self, actions):
         for action in actions:
