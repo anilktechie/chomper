@@ -17,7 +17,10 @@ class SqlExporterBase(SqlBase, Exporter):
         self._identifiers = kwargs.pop('identifiers', [])
         self._columns = kwargs.pop('columns', None)
         self._protected_columns = kwargs.pop('protected', None)
-        self._id_field = kwargs.pop('id_field', 'id')
+
+        self._set_id_field = False
+        self._id_field = False
+        self._id_column = False
 
         self._table_columns = []
 
@@ -48,6 +51,12 @@ class SqlExporterBase(SqlBase, Exporter):
         if isinstance(columns, six.string_types):
             columns = [columns]
         self._protected_columns = columns
+
+    @generative
+    def id_field(self, id_field='id', id_column='id'):
+        self._set_id_field = True
+        self._id_field = id_field
+        self._id_column = id_column
 
     @generative
     def timestamps(self, timezone='UTC', created_at='created_at', updated_at='updated_at'):
@@ -131,7 +140,7 @@ class Inserter(SqlExporterBase):
         insert = self._insert_query if self._insert_query else self._build_insert_query(item)
         inserted_id = self._run_query(insert)
 
-        if inserted_id and self._id_field:
+        if inserted_id and self._set_id_field:
             item[self._id_field] = inserted_id
 
         return item
@@ -196,11 +205,12 @@ class Upserter(SqlExporterBase):
         if result:
             update = self._update_query if self._update_query else self._build_update_query(item)
             self._run_query(update)
+            if self._set_id_field:
+                item[self._id_field] = result.get(self._id_column)
         else:
             insert = self._insert_query if self._insert_query else self._build_insert_query(item)
             inserted_id = self._run_query(insert)
-
-            if inserted_id and self._id_field:
+            if inserted_id and self._set_id_field:
                 item[self._id_field] = inserted_id
 
         self._notify_change_listeners(item, result)

@@ -57,8 +57,6 @@ class SqlInserterTest(SqlTestCaseBase):
         item = inserter(Item(first_name='Jeff', age=32, missing_column=True))
         item_db = self.db.select('SELECT * from inserter_test WHERE first_name = %s', ('Jeff', ))[0]
 
-        self.assertTrue('id' in item)
-        self.assertTrue(isinstance(item.id, int))
         self.assertEqual(item_db[1], 'Jeff')
         self.assertEqual(item_db[2], None)
         self.assertEqual(item_db[3], 32)
@@ -69,7 +67,6 @@ class SqlInserterTest(SqlTestCaseBase):
         item = inserter(Item(first_name='Annie', last_name='Edison', age=23))
         item_db = self.db.select('SELECT * from inserter_test WHERE first_name = %s', ('Annie',))[0]
 
-        self.assertTrue('id' in item)
         self.assertEqual(item_db[1], 'Annie')
         self.assertEqual(item_db[2], 'Edison')
         self.assertEqual(item_db[3], None)
@@ -128,6 +125,19 @@ class SqlUpserterTest(SqlTestCaseBase):
         self.assertTrue(rows[0][5] >= started_at)
         self.assertTrue(rows[1][4] >= started_at)
         self.assertTrue(rows[1][5] >= started_at)
+
+    def test_postgres_upserter_id_field(self):
+        upserter = Upserter('upserter_test').identifiers('first_name').id_field('person_id')
+
+        item_update = Item(first_name='Jeff')
+        item_insert = Item(first_name='Annie')
+        upserter(item_update)
+        upserter(item_insert)
+
+        self.assertTrue('person_id' in item_update)
+        self.assertTrue('person_id' in item_insert)
+        self.assertTrue(isinstance(item_update.person_id, int))
+        self.assertTrue(isinstance(item_insert.person_id, int))
 
     def test_postgres_upserter_insert_listener(self):
         on_insert = MagicMock()
