@@ -23,6 +23,7 @@ class SqlExporterBase(SqlBase, Exporter):
         self._id_column = False
 
         self._table_columns = []
+        self._mapping = False
 
         self._insert_query = None
 
@@ -53,6 +54,14 @@ class SqlExporterBase(SqlBase, Exporter):
         self._protected_columns = columns
 
     @generative
+    def mapping(self, mapping, restrict=True):
+        if not isinstance(mapping, dict):
+            raise ValueError('Field mapping must be a dict')
+        if restrict:
+            self._columns = mapping.keys()
+        self._mapping = mapping
+
+    @generative
     def id_field(self, id_field='id', id_column='id'):
         self._set_id_field = True
         self._id_field = id_field
@@ -80,9 +89,10 @@ class SqlExporterBase(SqlBase, Exporter):
         return Query().from_(self._table).insert_get_id(data)
 
     def _build_where_clause(self, query, item):
+        data = self._apply_mapping(item)
         try:
             for ident in self._identifiers:
-                query = query.where(ident, '=', item[ident])
+                query = query.where(ident, '=', data[ident])
         except TypeError:
             raise ValueError('Cannot build query where clause without identifier columns.')
         else:
@@ -115,7 +125,8 @@ class SqlExporterBase(SqlBase, Exporter):
         Return a dict of data that only contains fields that can be safely inserted into the table
         """
         fields = self._get_exportable_fields()
-        data = dict((key, value) for key, value in six.iteritems(item) if key in fields)
+        data = self._apply_mapping(item)
+        data = dict((key, value) for key, value in six.iteritems(data) if key in fields)
 
         if timestamps:
             data[self._updated_at_column] = self._get_timestamp()
@@ -124,6 +135,19 @@ class SqlExporterBase(SqlBase, Exporter):
             data[self._created_at_column] = self._get_timestamp()
 
         return data
+
+    def _apply_mapping(self, item):
+        if not isinstance(self._mapping, dict):
+            return item
+
+        out = dict(item)
+        for column, field in six.iteritems(self._mapping):
+            try:
+                out[column] = item[field]
+                del out[field]
+            except KeyError:
+                continue
+        return out
 
     def _get_timestamp(self):
         return datetime.now(timezone(self._timestamps_timezone))

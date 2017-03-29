@@ -139,6 +139,30 @@ class SqlUpserterTest(SqlTestCaseBase):
         self.assertTrue(isinstance(item_update.person_id, int))
         self.assertTrue(isinstance(item_insert.person_id, int))
 
+    def test_postgres_upserter_mapping(self):
+        upserter = Upserter('upserter_test').identifiers('first_name').mapping({
+            'last_name': 'family_name'
+        })
+
+        item = Item(first_name='Jeff', family_name='Edison', age=123)
+        upserter(item)
+
+        rows = self.db.select('SELECT * from upserter_test')
+        self.assertEqual(rows[0][2], 'Edison')
+        self.assertEqual(rows[0][3], None, msg='Should not update unmapped column')
+
+    def test_postgres_upserter_mapping_without_restrict(self):
+        upserter = Upserter('upserter_test').identifiers('first_name').mapping({
+            'last_name': 'family_name'
+        }, restrict=False)
+
+        item = Item(first_name='Jeff', family_name='Edison', age=123)
+        upserter(item)
+
+        rows = self.db.select('SELECT * from upserter_test')
+        self.assertEqual(rows[0][2], 'Edison')
+        self.assertEqual(rows[0][3], 123)
+
     def test_postgres_upserter_insert_listener(self):
         on_insert = MagicMock()
         upserter = Upserter('upserter_test').identifiers('first_name').on('insert', on_insert)
