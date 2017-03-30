@@ -10,4 +10,7 @@ CREATE TABLE upserter_test (
     PRIMARY KEY (id)
 );
 
+TRUNCATE TABLE upserter_test RESTART IDENTITY;
+
 INSERT INTO upserter_test (first_name, last_name, age, created_at, updated_at) VALUES ('Jeff', null, null, '2017-01-01 00:00:00.000000+0', '2017-01-01 00:00:00.000000+0');
+INSERT INTO upserter_test (first_name, last_name, age, created_at, updated_at) VALUES ('Britta', 'Perry', null, '2017-01-02 00:00:00.000000+0', '2017-01-02 00:00:00.000000+0');

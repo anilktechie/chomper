@@ -93,6 +93,9 @@ class SqlUpserterTest(SqlTestCaseBase):
     def setUp(self):
         self._execute_sql_file('tests/fixtures/test_sql_postgres_upserter.sql')
 
+    def _rows(self):
+        return self.db.select('SELECT * from upserter_test ORDER BY id ASC')
+
     def test_postgres_upserter(self):
         upserter = Upserter('upserter_test').identifiers('first_name').timestamps()
 
@@ -101,15 +104,14 @@ class SqlUpserterTest(SqlTestCaseBase):
         upserter(item1)
         upserter(item2)
 
-        rows = self.db.select('SELECT * from upserter_test')
-
-        self.assertEqual(len(rows), 2)
+        rows = self._rows()
+        self.assertEqual(len(rows), 3)
         self.assertEqual(rows[0][1], item1.first_name)
         self.assertEqual(rows[0][2], item1.last_name)
         self.assertEqual(rows[0][3], item1.age)
-        self.assertEqual(rows[1][1], item2.first_name)
-        self.assertEqual(rows[1][2], item2.last_name)
-        self.assertEqual(rows[1][3], item2.age)
+        self.assertEqual(rows[2][1], item2.first_name)
+        self.assertEqual(rows[2][2], item2.last_name)
+        self.assertEqual(rows[2][3], item2.age)
 
     def test_postgres_upserter_timestamps(self):
         started_at = datetime.now(timezone('UTC'))
@@ -118,13 +120,12 @@ class SqlUpserterTest(SqlTestCaseBase):
         upserter(Item(first_name='Jeff'))
         upserter(Item(first_name='Annie'))
 
-        rows = self.db.select('SELECT * from upserter_test')
-
+        rows = self._rows()
         self.assertEqual(rows[0][4], datetime(2017, 1, 1, 0, 0, 0, 0, timezone('UTC')))
         self.assertNotEqual(rows[0][5], datetime(2017, 1, 1, 0, 0, 0, 0, timezone('UTC')))
         self.assertTrue(rows[0][5] >= started_at)
-        self.assertTrue(rows[1][4] >= started_at)
-        self.assertTrue(rows[1][5] >= started_at)
+        self.assertTrue(rows[2][4] >= started_at)
+        self.assertTrue(rows[2][5] >= started_at)
 
     def test_postgres_upserter_id_field(self):
         upserter = Upserter('upserter_test').identifiers('first_name').id_field('person_id')
@@ -147,7 +148,7 @@ class SqlUpserterTest(SqlTestCaseBase):
         item = Item(first_name='Jeff', family_name='Edison', age=123)
         upserter(item)
 
-        rows = self.db.select('SELECT * from upserter_test')
+        rows = self._rows()
         self.assertEqual(rows[0][2], 'Edison')
         self.assertEqual(rows[0][3], None, msg='Should not update unmapped column')
 
@@ -159,9 +160,19 @@ class SqlUpserterTest(SqlTestCaseBase):
         item = Item(first_name='Jeff', family_name='Edison', age=123)
         upserter(item)
 
-        rows = self.db.select('SELECT * from upserter_test')
+        rows = self._rows()
         self.assertEqual(rows[0][2], 'Edison')
         self.assertEqual(rows[0][3], 123)
+
+    def test_postgres_upserter_no_overwrite(self):
+        upserter = Upserter('upserter_test').identifiers('first_name').overwrite(False)
+
+        item = Item(first_name='Britta', last_name='Barns', age=123)
+        upserter(item)
+
+        rows = self._rows()
+        self.assertEqual(rows[1][2], 'Perry', msg='Should NOT override existing data')
+        self.assertEqual(rows[1][3], 123, msg='Should update the null column')
 
     def test_postgres_upserter_insert_listener(self):
         on_insert = MagicMock()

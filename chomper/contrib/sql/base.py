@@ -35,6 +35,10 @@ class SqlBase(GenerativeBase):
         self._table = kwargs.pop('table', None)
         super(SqlBase, self).__init__()
 
+    @property
+    def manager(self):
+        return manager
+
     @generative
     def database(self, database):
         if isinstance(database, six.string_types):

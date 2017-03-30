@@ -79,10 +79,11 @@ class SqlExporterBase(SqlBase, Exporter):
         q = self._build_where_clause(q, item)
         return q.first()
 
-    def _build_update_query(self, item):
+    def _build_update_query(self, item, exclude=None):
+        fields = self._prepare_fields(item, timestamps=self._timestamps, exclude=exclude)
         q = Query().from_(self._table)
         q = self._build_where_clause(q, item)
-        return q.update(self._prepare_fields(item, timestamps=self._timestamps))
+        return q.update(fields)
 
     def _build_insert_query(self, item):
         data = self._prepare_fields(item, timestamps=self._timestamps, inserting=True)
@@ -120,7 +121,7 @@ class SqlExporterBase(SqlBase, Exporter):
 
         return columns
 
-    def _prepare_fields(self, item, timestamps=False, inserting=False):
+    def _prepare_fields(self, item, timestamps=False, inserting=False, exclude=None):
         """
         Return a dict of data that only contains fields that can be safely inserted into the table
         """
@@ -133,6 +134,13 @@ class SqlExporterBase(SqlBase, Exporter):
 
         if timestamps and inserting:
             data[self._created_at_column] = self._get_timestamp()
+
+        if exclude:
+            for field in exclude:
+                try:
+                    del data[field]
+                except KeyError:
+                    continue
 
         return data
 
@@ -221,13 +229,15 @@ class Upserter(SqlExporterBase):
         self._insert_query = None
         self._update_query = None
         self._listeners = {}
+        self._overwrite = True
 
     def export(self, item):
         select = self._select_query if self._select_query else self._build_select_query(item)
         result = self._run_query(select)
+        exclude = [] if self._overwrite else [col for col, value in result.items() if value]
 
         if result:
-            update = self._update_query if self._update_query else self._build_update_query(item)
+            update = self._update_query if self._update_query else self._build_update_query(item, exclude=exclude)
             self._run_query(update)
             if self._set_id_field:
                 item[self._id_field] = result.get(self._id_column)
@@ -252,6 +262,10 @@ class Upserter(SqlExporterBase):
     @generative
     def update(self, query):
         self._update_query = query
+
+    @generative
+    def overwrite(self, overwrite=True):
+        self._overwrite = overwrite
 
     @generative
     def on(self, event, field, listener=None):
