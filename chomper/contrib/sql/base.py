@@ -1,3 +1,4 @@
+import logging
 import types
 import six
 
@@ -11,6 +12,7 @@ from .database import manager
 try:
     from orator.support.collection import Collection
     from orator.connectors.postgres_connector import DictRow
+    from orator.exceptions.query import QueryException
 except ImportError:
     raise NotConfigured('Orator library is required to use the SQL module.')
 
@@ -34,6 +36,10 @@ class SqlBase(GenerativeBase):
         self._set_connection(kwargs.pop('database', None))
         self._table = kwargs.pop('table', None)
         super(SqlBase, self).__init__()
+
+    @property
+    def logger(self):
+        return logging.getLogger(__name__)
 
     @property
     def manager(self):
@@ -104,7 +110,11 @@ class SqlBase(GenerativeBase):
         return self._get_connection().query()
 
     def _run_query(self, query, **context):
-        return replay(query, self._get_query(), self._signature_filter(context))
+        try:
+            return replay(query, self._get_query(), self._signature_filter(context))
+        except QueryException:
+            self.logger.exception('Error running SQL query')
+            return None
 
     def _get_table_columns(self, table_name):
         return self._get_connection().table_columns(table_name)
