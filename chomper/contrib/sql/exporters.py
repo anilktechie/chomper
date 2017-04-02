@@ -234,9 +234,9 @@ class Upserter(SqlExporterBase):
     def export(self, item):
         select = self._select_query if self._select_query else self._build_select_query(item)
         result = self._run_query(select)
-        exclude = [] if self._overwrite else [col for col, value in result.items() if value]
 
         if result:
+            exclude = [] if self._overwrite else [col for col, value in result.items() if value]
             update = self._update_query if self._update_query else self._build_update_query(item, exclude=exclude)
             self._run_query(update)
             if self._set_id_field:
