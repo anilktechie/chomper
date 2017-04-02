@@ -1,5 +1,7 @@
 from __future__ import absolute_import
 
+import six
+
 from chomper import config
 from chomper.exceptions import NotConfigured
 from chomper.readers import Reader
@@ -14,16 +16,19 @@ class QueueReader(Reader):
     """
     Redis queue reader
 
-    blpop/lpop items from a Redis queue with the provided key
+    blpop/lpop items from a Redis queue with the provided key/s
     """
 
     schemes = ['redis']
 
-    def __init__(self, key, timeout=None, host=None, port=None, redis_args=None):
+    def __init__(self, keys, timeout=None, host=None, port=None, redis_args=None):
         if redis_args is None:
             redis_args = dict()
 
-        self.key = key
+        if isinstance(keys, six.string_types):
+            keys = [keys]
+
+        self.keys = keys
         self.timeout = timeout
 
         host = host if host is not None else config.get('redis', 'host')
@@ -40,11 +45,15 @@ class QueueReader(Reader):
 
     def _pop(self):
         if self.timeout is not None:
-            result = self.redis.blpop([self.key], self.timeout)
+            result = self.redis.blpop(self.keys, self.timeout)
             if result is not None:
                 source, data = result
                 return data
             else:
                 return None
         else:
-            return self.redis.lpop(self.key)
+            for key in self.keys:
+                result = self.redis.lpop(key)
+                if result is not None:
+                    return result
+            return None
