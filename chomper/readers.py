@@ -1,3 +1,5 @@
+import logging
+
 try:
     from urllib.parse import urlparse
 except ImportError:
@@ -32,6 +34,10 @@ class Reader(object):
 
     def read(self):
         raise NotImplementedError()
+
+    @property
+    def logger(self):
+        return logging.getLogger(__name__)
 
     @classmethod
     def from_uri(cls, uri, *args, **kwargs):

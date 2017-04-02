@@ -34,11 +34,13 @@ class QueueReader(Reader):
         host = host if host is not None else config.get('redis', 'host')
         port = port if port is not None else config.getint('redis', 'port')
         self.redis = redis.StrictRedis(host=host, port=port, **redis_args)
+        self.logger.info('Reading from Redis keys %s' % ', '.join(self.keys))
 
     def read(self):
         while True:
             data = self._pop()
             if data is None:
+                self.logger.debug('Nothing left in Redis queue for keys %s' % ', '.join(self.keys))
                 break
             else:
                 yield data
