@@ -1,5 +1,5 @@
 from ... import Item
-from ...feeders import Feeder
+from ...loaders import Feeder
 from ...support.generative import generative
 from .base import SqlBase
 from .database import Query

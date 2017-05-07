@@ -1,6 +1,6 @@
 import logging
 from chomper import Importer, Item
-from chomper.feeders import ListFeeder
+from chomper.loaders import ListFeeder
 
 logging.basicConfig(level=logging.DEBUG)
 

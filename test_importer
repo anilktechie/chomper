@@ -1,0 +1,6 @@
+// pipeline
+digraph {
+	fetch_companies [shape=rectangle]
+	log_item [shape=rectangle]
+		fetch_companies -> log_item
+}

@@ -1,92 +1,96 @@
-import logging
-
-try:
-    from urllib.parse import urlparse
-except ImportError:
-    from urlparse import urlparse
-
 try:
     import requests
 except ImportError:
     requests = None
 
+from chomper.nodes import Node, processor
 from chomper.exceptions import NotConfigured, ItemNotImportable
+from chomper.support import generative
 
 
-class Resource(object):
+class File(Node):
 
-    def __init__(self, uri):
-        self.uri = uri
+    def __init__(self, name):
+        self._uri = None
+        self._lines = False
+        super(File, self).__init__(name)
 
-        if '://' not in uri:
-            u = urlparse(uri, scheme='file')
+    @generative
+    def uri(self, uri):
+        self._uri = uri
+
+    path = uri
+
+    @generative
+    def lines(self, read_lines=True):
+        self._lines = read_lines
+
+    @processor(['empty'])
+    def read(self, item):
+        if self._lines:
+            self.push(self._read_lines())
         else:
-            u = urlparse(uri)
+            self.push(self._read_file())
 
-        for key in ('scheme', 'netloc', 'path', 'params', 'query', 'fragment',
-                    'username', 'password', 'hostname', 'port'):
-            setattr(self, key, getattr(u, key))
+    def _read_lines(self):
+        with open(self._uri, 'r') as f:
+            for line in f:
+                if line and line.strip():
+                    yield line.strip()
+                else:
+                    # Line with only whitespace, skip it
+                    continue
 
-
-class Reader(object):
-
-    schemes = None
-
-    def read(self):
-        raise NotImplementedError()
-
-    @property
-    def logger(self):
-        return logging.getLogger(__name__)
-
-    @classmethod
-    def from_uri(cls, uri, *args, **kwargs):
-        return cls(Resource(uri), *args, **kwargs)
-
-    @classmethod
-    def can_read(cls, uri):
-        resource = Resource(uri)
-        return cls.schemes and resource.scheme in cls.schemes
+    def _read_file(self):
+        with open(self._uri, 'r') as f:
+            return f.read()
 
 
-class FileReader(Reader):
-
-    schemes = ['file']
-
-    def __init__(self, resource, lines=True):
-        self.resource = resource
-        self.lines = lines
-
-    def read(self):
-        with open(self.resource.uri, 'r') as f:
-            if self.lines:
-                for line in f:
-                    if line and line.strip():
-                        yield line.strip()
-                    else:
-                        continue
-            else:
-                yield f.read()
+def _request_method(method):
+    @generative
+    def func(self, uri, **request_args):
+        self._uri = uri
+        self._method = method
+        self._request_args = request_args
+    return func
 
 
-class HttpReader(Reader):
+class Http(Node):
 
-    schemes = ['http', 'https']
-
-    def __init__(self, resource, method='get', lines=True, **request_args):
+    def __init__(self, name):
         if requests is None:
             raise NotConfigured('HttpReader requires the "requests" library to be installed')
 
-        self.resource = resource
-        self.lines = lines
-        self.method = method.lower()
-        self.request_args = request_args
+        self._uri = None
+        self._lines = False
+        self._method = 'get'
+        self._request_args = {}
 
-    def read(self):
-        response = requests.request(self.method, self.resource.uri, **self.request_args)
+        super(Http, self).__init__(name)
+
+    @generative
+    def lines(self, read_lines=True):
+        self._lines = read_lines
+
+    get = _request_method('get')
+    head = _request_method('head')
+    post = _request_method('post')
+    patch = _request_method('patch')
+    put = _request_method('put')
+    delete = _request_method('delete')
+    options = _request_method('options')
+
+    @processor(['empty'])
+    def read(self, item):
+        if self._lines:
+            self.push(self._read_lines())
+        else:
+            self.push(self._read_file())
+
+    def _read_lines(self):
+        response = requests.request(self._method, self._uri, **self._request_args)
 
         if not response.ok:
-            # TODO: How should we handle http errors?
             raise ItemNotImportable()
 
         if self.lines:
@@ -95,29 +99,29 @@ class HttpReader(Reader):
                     yield line.strip()
                 else:
                     continue
-        else:
-            yield response.text
+
+    def _read_file(self):
+        response = requests.request(self._method, self._uri, **self._request_args)
+
+        if not response.ok:
+            raise ItemNotImportable()
+
+        return response.text
 
 
-class S3Reader(Reader):
-
-    schemes = ['s3']
-
-    def __init__(self):
-        raise NotImplementedError()
-
-
-class FtpReader(Reader):
-
-    schemes = ['ftp']
+class S3(Node):
 
     def __init__(self):
         raise NotImplementedError()
 
 
-class HdfsReader(Reader):
+class Ftp(Node):
 
-    schemes = ['hdfs']
+    def __init__(self):
+        raise NotImplementedError()
+
+
+class Hdfs(Node):
 
     def __init__(self):
         raise NotImplementedError()
